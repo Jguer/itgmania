@@ -13,7 +13,6 @@
 #include "opentelemetry/sdk/metrics/view/meter_selector_factory.h"
 #include "opentelemetry/sdk/metrics/view/view_factory.h"
 
-
 MetricsProvider* METRICS = nullptr;
 
 namespace metrics_sdk      = opentelemetry::sdk::metrics;
@@ -24,7 +23,7 @@ namespace metrics_api      = opentelemetry::metrics;
 MetricsProvider::MetricsProvider()
 { 
 	std::string name{"itgmania"};
-	std::string addr{"https://localhost:2222/metrics"};
+	std::string addr{"localhost:9464"};
 	metrics_exporter::PrometheusExporterOptions opts;
 	if (!addr.empty())
 	{
@@ -74,10 +73,31 @@ MetricsProvider::MetricsProvider()
 
 	std::shared_ptr<opentelemetry::metrics::MeterProvider> provider(std::move(u_provider));
 	metrics_api::Provider::SetMeterProvider(provider);
+
+	// create metrics
+	opentelemetry::nostd::shared_ptr<metrics_api::Meter> meter = provider->GetMeter(name, "1.2.0");
+	m_hitHistogram = meter->CreateUInt64Histogram("hitHistogram", "hits", "unit");
+	m_hitCounter = meter->CreateUInt64Counter("hitCounter", "total hits of session", "unit");
+	m_hitGauge = meter->CreateInt64Gauge("hitGauge", "hits over the current song", "unit");
 }
 
 MetricsProvider::~MetricsProvider()
 {
   std::shared_ptr<metrics_api::MeterProvider> none;
   metrics_api::Provider::SetMeterProvider(none);
+}
+
+opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Histogram<uint64_t>> MetricsProvider::GetHistogram()
+{
+	return m_hitHistogram;
+}
+
+opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Gauge<int64_t>> MetricsProvider::GetGauge(std::string name)
+{
+	return m_hitGauge;
+}
+
+opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Counter<uint64_t>> MetricsProvider::GetCounter()
+{
+    return m_hitCounter;
 }
