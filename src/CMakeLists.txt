@@ -445,6 +445,16 @@ else() # Unix / Linux TODO: Remember to find and locate the zip archive files.
   list(REMOVE_DUPLICATES SMDATA_LINK_LIB)
 endif()
 
+list(APPEND SMDATA_LINK_LIB "opentelemetry_trace"
+    "opentelemetry_common"
+    "opentelemetry_exporter_prometheus"
+    "opentelemetry_otlp_recordable"
+    "opentelemetry_resources"
+    "opentelemetry_metrics"
+    )
+
+list(APPEND SM_INCLUDE_DIRS "${OPENTELEMETRY_CPP_INCLUDE_DIRS}")
+
 target_link_libraries("${SM_EXE_NAME}" ${SMDATA_LINK_LIB})
 
 list(APPEND SM_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}

@@ -13,6 +13,7 @@
 #include "RageDisplay.h"
 #include "RageThreads.h"
 #include "LocalizedString.h"
+#include "MetricsProvider.h"
 
 #include "arch/ArchHooks/ArchHooks.h"
 #include "arch/LoadingWindow/LoadingWindow.h"
@@ -329,6 +330,7 @@ void ShutdownGame()
 	SAFE_DELETE( FONT );
 	SAFE_DELETE( TEXTUREMAN );
 	SAFE_DELETE( DISPLAY );
+	SAFE_DELETE( METRICS );
 	Dialog::Shutdown();
 	SAFE_DELETE( LOG );
 	SAFE_DELETE( FILEMAN );
@@ -904,6 +906,8 @@ int sm_main(int argc, char* argv[])
 	ApplyLogPreferences();
 
 	WriteLogHeader();
+
+	METRICS = new MetricsProvider;
 
 	// Set up alternative filesystem trees.
 	MountFolders("dirro", PREFSMAN->m_sAdditionalFoldersReadOnly.Get(), "/");
