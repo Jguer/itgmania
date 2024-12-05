@@ -44,6 +44,7 @@
 #include <cmath>
 #include <cstddef>
 #include <vector>
+#include "MetricsProvider.h"
 
 
 RString ATTACK_DISPLAY_X_NAME( std::size_t p, std::size_t both_sides );

@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include "MetricsProvider.h"
 
 
 static RString PercentScoreWeightName( std::size_t i ) { return "PercentScoreWeight" + ScoreEventToString( (ScoreEvent)i ); }
@@ -431,6 +432,15 @@ void ScoreKeeperNormal::HandleTapNoteScoreInternal( TapNoteScore tns, TapNoteSco
 	if( !m_pPlayerStageStats->m_bFailed )
 		m_pPlayerStageStats->m_iActualDancePoints += TapNoteScoreToDancePoints( tns );
 
+    std::map<std::string, std::string> labels = {
+		{"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)},
+		{"tns", TapNoteScoreToLocalizedString(tns)},
+	};
+
+	// update the miss counter
+	auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+	auto hitCounter = METRICS->GetCounter();
+
 	// update judged row totals. Respect Combo segments here.
 	TimingData &td = *GAMESTATE->m_pCurSteps[m_pPlayerState->m_PlayerNumber]->GetTimingData();
 	ComboSegment *cs = td.GetComboSegmentAtRow(row);
@@ -446,6 +456,13 @@ void ScoreKeeperNormal::HandleTapNoteScoreInternal( TapNoteScore tns, TapNoteSco
 	{
 		m_pPlayerStageStats->m_iTapNoteScores[tns] += 1;
 	}
+
+	LOG->Info("updated tap note score %s: %d", TapNoteScoreToLocalizedString(tns).c_str(), m_pPlayerStageStats->m_iTapNoteScores[tns]);
+	auto gauge = METRICS->GetGauge("hitGauge");
+	auto context           = opentelemetry::context::Context{};
+    gauge->Record(m_pPlayerStageStats->m_iTapNoteScores[tns], labelkv, context);
+	hitCounter->Add(1, labelkv, context);
+	
 
 	// increment the current total possible dance score
 	m_pPlayerStageStats->m_iCurPossibleDancePoints += TapNoteScoreToDancePoints( maximum );
