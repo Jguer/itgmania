@@ -159,6 +159,8 @@ include(ExternalProject)
 find_package(nasm)
 find_package(yasm)
 find_package(Iconv)
+find_package(CURL REQUIRED)
+find_package(opentelemetry-cpp CONFIG REQUIRED)
 
 find_package(Threads)
 if(${Threads_FOUND})
