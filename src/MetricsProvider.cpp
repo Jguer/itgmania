@@ -1,14 +1,29 @@
 // MetricsProvider.cpp
 #include "MetricsProvider.h"
 
+#include "opentelemetry/common/attribute_value.h"
+#include "opentelemetry/exporters/otlp/otlp_environment.h"
+#include "opentelemetry/exporters/otlp/otlp_http.h"
+#include "opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h"
+#include "opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h"
+#include "opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h"
 #include "opentelemetry/exporters/prometheus/exporter_factory.h"
 #include "opentelemetry/exporters/prometheus/exporter_options.h"
+#include "opentelemetry/metrics/meter_provider.h"
 #include "opentelemetry/metrics/provider.h"
+#include "opentelemetry/sdk/common/global_log_handler.h"
 #include "opentelemetry/sdk/metrics/aggregation/default_aggregation.h"
 #include "opentelemetry/sdk/metrics/aggregation/histogram_aggregation.h"
+#include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h"
+#include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_options.h"
 #include "opentelemetry/sdk/metrics/meter.h"
+#include "opentelemetry/sdk/metrics/meter_context.h"
+#include "opentelemetry/sdk/metrics/meter_context_factory.h"
 #include "opentelemetry/sdk/metrics/meter_provider.h"
 #include "opentelemetry/sdk/metrics/meter_provider_factory.h"
+#include "opentelemetry/sdk/metrics/metric_reader.h"
+#include "opentelemetry/sdk/metrics/push_metric_exporter.h"
+#include "opentelemetry/sdk/metrics/state/filtered_ordered_attribute_map.h"
 #include "opentelemetry/sdk/metrics/view/instrument_selector_factory.h"
 #include "opentelemetry/sdk/metrics/view/meter_selector_factory.h"
 #include "opentelemetry/sdk/metrics/view/view_factory.h"
@@ -19,59 +34,30 @@ namespace metrics_sdk      = opentelemetry::sdk::metrics;
 namespace common           = opentelemetry::common;
 namespace metrics_exporter = opentelemetry::exporter::metrics;
 namespace metrics_api      = opentelemetry::metrics;
+namespace otlp_exporter = opentelemetry::exporter::otlp;
 
 MetricsProvider::MetricsProvider()
 { 
-	std::string name{"itgmania"};
-	std::string addr{"localhost:9464"};
-	metrics_exporter::PrometheusExporterOptions opts;
-	if (!addr.empty())
-	{
-		opts.url = addr;
-	}
-	std::puts("PrometheusExporter itgmania program running ...");
-
+	otlp_exporter::OtlpHttpMetricExporterOptions exporter_options;
+	auto exporter = otlp_exporter::OtlpHttpMetricExporterFactory::Create(exporter_options);
 	std::string version{"1.2.0"};
 	std::string schema{"https://opentelemetry.io/schemas/1.2.0"};
-
-	auto prometheus_exporter = metrics_exporter::PrometheusExporterFactory::Create(opts);
+	std::string name{"itgmania"};
 
 	// Initialize and set the global MeterProvider
-	auto u_provider = metrics_sdk::MeterProviderFactory::Create();
-	auto *p         = static_cast<metrics_sdk::MeterProvider *>(u_provider.get());
+	metrics_sdk::PeriodicExportingMetricReaderOptions reader_options;
+	reader_options.export_interval_millis = std::chrono::milliseconds(1000);
+	reader_options.export_timeout_millis  = std::chrono::milliseconds(500);
 
-	p->AddMetricReader(std::move(prometheus_exporter));
+	auto reader =
+		metrics_sdk::PeriodicExportingMetricReaderFactory::Create(std::move(exporter), reader_options);
 
-	// counter view
-	std::string counter_name = name + "_counter";
-	std::string counter_unit = "unit";
+	auto context = metrics_sdk::MeterContextFactory::Create();
+	context->AddMetricReader(std::move(reader));
 
-	auto instrument_selector = metrics_sdk::InstrumentSelectorFactory::Create(
-		metrics_sdk::InstrumentType::kCounter, counter_name, counter_unit);
-
-	auto meter_selector = metrics_sdk::MeterSelectorFactory::Create(name, version, schema);
-
-	auto sum_view = metrics_sdk::ViewFactory::Create(counter_name, "description", counter_unit,
-													metrics_sdk::AggregationType::kSum);
-
-	p->AddView(std::move(instrument_selector), std::move(meter_selector), std::move(sum_view));
-
-	// histogram view
-	std::string histogram_name = name + "_histogram";
-	std::string histogram_unit = "unit";
-
-	auto histogram_instrument_selector = metrics_sdk::InstrumentSelectorFactory::Create(
-		metrics_sdk::InstrumentType::kHistogram, histogram_name, histogram_unit);
-
-	auto histogram_meter_selector = metrics_sdk::MeterSelectorFactory::Create(name, version, schema);
-
-	auto histogram_view = metrics_sdk::ViewFactory::Create(
-		histogram_name, "description", histogram_unit, metrics_sdk::AggregationType::kHistogram);
-
-	p->AddView(std::move(histogram_instrument_selector), std::move(histogram_meter_selector),
-				std::move(histogram_view));
-
+	auto u_provider = metrics_sdk::MeterProviderFactory::Create(std::move(context));
 	std::shared_ptr<opentelemetry::metrics::MeterProvider> provider(std::move(u_provider));
+
 	metrics_api::Provider::SetMeterProvider(provider);
 
 	// create metrics
