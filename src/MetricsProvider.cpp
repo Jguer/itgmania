@@ -38,6 +38,7 @@ namespace otlp_exporter = opentelemetry::exporter::otlp;
 MetricsProvider::MetricsProvider()
 { 
 	otlp_exporter::OtlpHttpMetricExporterOptions exporter_options;
+	exporter_options.url = "http://localhost:4317";
 	auto exporter = otlp_exporter::OtlpHttpMetricExporterFactory::Create(exporter_options);
 	std::string version{"1.2.0"};
 	std::string schema{"https://opentelemetry.io/schemas/1.2.0"};
