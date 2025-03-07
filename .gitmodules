@@ -50,3 +50,6 @@
 	path = extern/hidapi
 	url = https://github.com/libusb/hidapi.git
 	shallow = true
+[submodule "extern/opentelemetry-cpp"]
+	path = extern/opentelemetry-cpp
+	url = https://github.com/open-telemetry/opentelemetry-cpp.git
