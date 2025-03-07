@@ -160,7 +160,11 @@ find_package(nasm)
 find_package(yasm)
 find_package(Iconv)
 find_package(CURL REQUIRED)
-find_package(opentelemetry-cpp CONFIG REQUIRED)
+# Look for opentelemetry-cpp, but don't require it - we'll use our vendored version
+find_package(opentelemetry-cpp CONFIG)
+if(NOT opentelemetry-cpp_FOUND)
+  message(STATUS "Using vendored OpenTelemetry-cpp from extern directory")
+endif()
 
 find_package(Threads)
 if(${Threads_FOUND})

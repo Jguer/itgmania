@@ -7,6 +7,7 @@
 #include "RageThreads.h"
 #include "RageTimer.h"
 #include "RageUtil.h"
+#include "RageFile.h"
 #include "MetricsProvider.h"
 
 class RageLog

@@ -19,7 +19,11 @@ include ( CheckIncludeFile )
 
 find_package ( PkgConfig )
 if ( PKG_CONFIG_FOUND )
-  pkg_check_modules ( PKGCONFIG_LIBUSB libusb )
+  # Try libusb-1.0 first, then fall back to legacy libusb
+  pkg_check_modules ( PKGCONFIG_LIBUSB libusb-1.0 )
+  if (NOT PKGCONFIG_LIBUSB_FOUND)
+    pkg_check_modules ( PKGCONFIG_LIBUSB libusb )
+  endif()
 endif ( PKG_CONFIG_FOUND )
 
 if ( PKGCONFIG_LIBUSB_FOUND )
@@ -37,15 +41,34 @@ if ( PKGCONFIG_LIBUSB_FOUND )
   endforeach ( i )
 
 else ( PKGCONFIG_LIBUSB_FOUND )
+  # Try to find libusb 1.0 first
   find_path ( LIBUSB_INCLUDE_DIRS
     NAMES
-      usb.h
+      libusb-1.0/libusb.h
     PATHS
       $ENV{ProgramFiles}/LibUSB-Win32
       $ENV{LibUSB_ROOT_DIR}
+      /usr/include
+      /usr/local/include
     PATH_SUFFIXES
       include
   )
+  
+  # If libusb 1.0 not found, try legacy libusb
+  if (NOT LIBUSB_INCLUDE_DIRS)
+    find_path ( LIBUSB_INCLUDE_DIRS
+      NAMES
+        usb.h
+      PATHS
+        $ENV{ProgramFiles}/LibUSB-Win32
+        $ENV{LibUSB_ROOT_DIR}
+        /usr/include
+        /usr/local/include
+      PATH_SUFFIXES
+        include
+    )
+  endif()
+  
   mark_as_advanced ( LIBUSB_INCLUDE_DIRS )
 #  message ( STATUS "LibUSB include dir: ${LIBUSB_INCLUDE_DIRS}" )
 
@@ -65,15 +88,34 @@ else ( PKGCONFIG_LIBUSB_FOUND )
     endif ( MSVC )
   endif ( ${CMAKE_SYSTEM_NAME} STREQUAL "Windows" )
 
+  # Try to find libusb-1.0 first
   find_library ( usb_LIBRARY
     NAMES
-      libusb usb
+      libusb-1.0 usb-1.0
     PATHS
       $ENV{ProgramFiles}/LibUSB-Win32
       $ENV{LibUSB_ROOT_DIR}
+      /usr/lib
+      /usr/local/lib
     PATH_SUFFIXES
       ${LibUSB_LIBRARY_PATH_SUFFIX}
   )
+  
+  # If libusb-1.0 not found, try legacy libusb
+  if (NOT usb_LIBRARY)
+    find_library ( usb_LIBRARY
+      NAMES
+        libusb usb
+      PATHS
+        $ENV{ProgramFiles}/LibUSB-Win32
+        $ENV{LibUSB_ROOT_DIR}
+        /usr/lib
+        /usr/local/lib
+      PATH_SUFFIXES
+        ${LibUSB_LIBRARY_PATH_SUFFIX}
+    )
+  endif()
+  
   mark_as_advanced ( usb_LIBRARY )
   if ( usb_LIBRARY )
     set ( LIBUSB_LIBRARIES ${usb_LIBRARY} )
@@ -85,13 +127,23 @@ else ( PKGCONFIG_LIBUSB_FOUND )
 endif ( PKGCONFIG_LIBUSB_FOUND )
 
 if ( LIBUSB_FOUND )
-  set ( CMAKE_REQUIRED_INCLUDES "${LIBUSB_INCLUDE_DIRS}" )
-  check_include_file ( usb.h LIBUSB_FOUND )
-#    message ( STATUS "LibUSB: usb.h is usable: ${LIBUSB_FOUND}" )
-endif ( LIBUSB_FOUND )
-if ( LIBUSB_FOUND )
-  check_library_exists ( "${LIBUSB_LIBRARIES}" usb_open "" LIBUSB_FOUND )
-#    message ( STATUS "LibUSB: library is usable: ${LIBUSB_FOUND}" )
+  # Check if we found libusb 1.0
+  if (EXISTS "${LIBUSB_INCLUDE_DIRS}/libusb-1.0/libusb.h")
+    set ( CMAKE_REQUIRED_INCLUDES "${LIBUSB_INCLUDE_DIRS}" )
+    check_include_file ( libusb-1.0/libusb.h LIBUSB_FOUND )
+    # Handle libusb 1.0 API
+    if (LIBUSB_FOUND)
+      set(CMAKE_REQUIRED_LIBRARIES ${LIBUSB_LIBRARIES})
+      check_library_exists ( "${LIBUSB_LIBRARIES}" libusb_open "" LIBUSB_FOUND )
+    endif()
+  else()
+    # Legacy libusb
+    set ( CMAKE_REQUIRED_INCLUDES "${LIBUSB_INCLUDE_DIRS}" )
+    check_include_file ( usb.h LIBUSB_FOUND )
+    if (LIBUSB_FOUND)
+      check_library_exists ( "${LIBUSB_LIBRARIES}" usb_open "" LIBUSB_FOUND )
+    endif()
+  endif()
 endif ( LIBUSB_FOUND )
 
 if ( NOT LIBUSB_FOUND )

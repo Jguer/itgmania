@@ -9,6 +9,7 @@ RUN dnf -y update && dnf -y install --skip-unavailable \
     make \
     nasm \
     curl \
+    curl-devel \
     wget \
     ninja-build \
     pkgconfig \
@@ -24,8 +25,21 @@ RUN dnf -y update && dnf -y install --skip-unavailable \
     libva-devel \
     openssl-devel \
     systemd-devel \
-    libusb-devel \
+    libusb1-devel \
+    libusb-compat-0.1-devel \
+    protobuf-devel \
+    gtest-devel \
+    nlohmann-json-devel \
     gtk3-devel \
+    # Missing libraries from Fedora 23 list
+    libpng-devel \
+    libjpeg-devel \
+    zlib-devel \
+    libogg-devel \
+    libvorbis-devel \
+    libmad-devel \
+    bzip2-devel \
+    pcre-devel \
     # Development tools
     gdb \
     valgrind \
