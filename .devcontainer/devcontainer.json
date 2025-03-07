@@ -1,0 +1,22 @@
+{
+	"name": "ITGmania Development",
+	"build": {
+		"dockerfile": "Dockerfile",
+		"context": ".."
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode.cpptools-extension-pack",
+				"ms-vscode.cmake-tools"
+			],
+			"settings": {
+				"cmake.configureOnOpen": true,
+				"C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
+			}
+		}
+	},
+	"remoteUser": "developer",
+	"forwardPorts": [],
+	"features": {}
+} 

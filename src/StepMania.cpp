@@ -851,6 +851,10 @@ static void ApplyLogPreferences()
 	LOG->SetInfoToDisk( true );
 	LOG->SetUserLogToDisk( true );
 	LOG->SetFlushing( PREFSMAN->m_bForceLogFlush );
+	// Apply OpenTelemetry logging preference if METRICS is initialized
+	if (METRICS != nullptr) {
+		LOG->SetLogToOpenTelemetry( PREFSMAN->m_bLogToOpenTelemetry );
+	}
 	Checkpoints::LogCheckpoints( PREFSMAN->m_bLogCheckpoints );
 }
 
@@ -908,6 +912,9 @@ int sm_main(int argc, char* argv[])
 	WriteLogHeader();
 
 	METRICS = new MetricsProvider;
+	
+	// Now that METRICS is initialized, apply the OpenTelemetry logging preference
+	LOG->SetLogToOpenTelemetry(PREFSMAN->m_bLogToOpenTelemetry);
 
 	// Set up alternative filesystem trees.
 	MountFolders("dirro", PREFSMAN->m_sAdditionalFoldersReadOnly.Get(), "/");
@@ -1276,7 +1283,7 @@ bool HandleGlobalInputs( const InputEventPlus &input )
 	if( input.DeviceI == DeviceInput(DEVICE_KEYBOARD, KEY_F4) )
 	{
 		if( INPUTFILTER->IsBeingPressed( DeviceInput(DEVICE_KEYBOARD, KEY_RALT), &input.InputList) ||
-			INPUTFILTER->IsBeingPressed( DeviceInput(DEVICE_KEYBOARD, KEY_LALT), &input.InputList) )
+			INPUTFILTER->IsBeingPressed( DeviceInput(DEVICE_KEYBOARD, KEY_LALT), &input.InputList))
 		{
 			// pressed Alt+F4
 			ArchHooks::SetUserQuit();
@@ -1327,7 +1334,7 @@ bool HandleGlobalInputs( const InputEventPlus &input )
 
 	if( input.DeviceI == DeviceInput(DEVICE_KEYBOARD, KEY_ENTER) &&
 		(INPUTFILTER->IsBeingPressed(DeviceInput(DEVICE_KEYBOARD, KEY_RALT), &input.InputList) ||
-		 INPUTFILTER->IsBeingPressed(DeviceInput(DEVICE_KEYBOARD, KEY_LALT), &input.InputList)) )
+		 INPUTFILTER->IsBeingPressed(DeviceInput(DEVICE_KEYBOARD, KEY_LALT), &input.InputList))
 	{
 		// alt-enter
 		/* In macOS, this is a menu item and will be handled as such. This will

@@ -4,6 +4,8 @@
 #include "RageTimer.h"
 #include "RageFile.h"
 #include "RageThreads.h"
+// External OpenTelemetry includes needed for severity conversion
+#include "opentelemetry/logs/severity.h"
 
 #include <ctime>
 #include <map>
@@ -82,7 +84,7 @@ enum
 };
 
 RageLog::RageLog(): m_bLogToDisk(false), m_bInfoToDisk(false),
-m_bUserLogToDisk(false), m_bFlush(false), m_bShowLogOutput(false)
+m_bUserLogToDisk(false), m_bFlush(false), m_bShowLogOutput(false), m_bLogToOpenTelemetry(true)
 {
 	g_fileLog = new RageFile;
 	g_fileInfo = new RageFile;
@@ -93,6 +95,12 @@ m_bUserLogToDisk(false), m_bFlush(false), m_bShowLogOutput(false)
 	{ fprintf(stderr, "Couldn't open %s: %s\n", TIME_PATH, g_fileTimeLog->GetError().c_str()); }
 
 	g_Mutex = new RageMutex( "Log" );
+	
+	m_Mutex.SetName("RageLog");
+	m_fileLog = NULL;
+	m_fileInfo = NULL;
+	m_fileUserLog = NULL;
+	m_fileTimeLog = NULL;
 }
 
 RageLog::~RageLog()
@@ -297,6 +305,13 @@ void RageLog::Write( int where, const RString &sLine )
 			g_fileTimeLog->PutLine(sStr);
 
 		AddToRecentLogs( sStr );
+		
+		// Forward to OpenTelemetry if enabled and METRICS is initialized
+		if (m_bLogToOpenTelemetry && METRICS != nullptr)
+		{
+		    opentelemetry::v2::logs::Severity severity = ConvertToOtelSeverity(where);
+		    METRICS->Log(severity, sStr);
+		}
 
 		if( m_bLogToDisk && g_fileLog->IsOpen() )
 			g_fileLog->PutLine( sStr );
@@ -445,6 +460,22 @@ void ShowWarningOrTrace( const char *file, int line, const char *message, bool b
 		fprintf( stderr, "%s:%i: %s\n", file, line, message );
 }
 
+// New method to enable/disable OpenTelemetry logging
+void RageLog::SetLogToOpenTelemetry(bool b)
+{
+    m_bLogToOpenTelemetry = b;
+}
+
+// Convert RageLog severity level to OpenTelemetry severity
+opentelemetry::v2::logs::Severity RageLog::ConvertToOtelSeverity(int level)
+{
+    if (level & WRITE_LOUD)
+        return opentelemetry::v2::logs::Severity::kWarn;
+    else if (level & WRITE_TO_INFO)
+        return opentelemetry::v2::logs::Severity::kInfo;
+    else
+        return opentelemetry::v2::logs::Severity::kDebug;
+}
 
 /*
  * Copyright (c) 2001-2004 Chris Danford, Glenn Maynard

@@ -3,6 +3,12 @@
 #ifndef RAGE_LOG_H
 #define RAGE_LOG_H
 
+#include <map>
+#include "RageThreads.h"
+#include "RageTimer.h"
+#include "RageUtil.h"
+#include "MetricsProvider.h"
+
 class RageLog
 {
 public:
@@ -22,6 +28,7 @@ public:
 
 	static const char *GetAdditionalLog();
 	static const char *GetInfo();
+	static const char *GetUserInfo();
 	/* Returns nullptr if past the last recent log. */
 	static const char *GetRecentLog( int n );
 
@@ -31,16 +38,36 @@ public:
 	void SetUserLogToDisk( bool b);	// enable or disable logging user.txt to file
 	void SetFlushing( bool b );	// enable or disable flushing
 
+	// Enable or disable OpenTelemetry logging
+	void SetLogToOpenTelemetry(bool b);
+
 private:
 	bool m_bLogToDisk;
 	bool m_bInfoToDisk;
 	bool m_bUserLogToDisk;
 	bool m_bFlush;
 	bool m_bShowLogOutput;
+	bool m_bLogToOpenTelemetry;
 	void Write( int, const RString &str );
 	void UpdateMappedLog();
 	void AddToInfo( const RString &buf );
 	void AddToRecentLogs( const RString &buf );
+
+	RageMutex m_Mutex;
+
+	RString m_sInfoLog;
+	RString m_sUserLog;
+	RString m_sRecentLog;
+	RString m_sTimeLog;
+	std::map<RString, RString> m_mapLog;
+
+	RageFile *m_fileLog;
+	RageFile *m_fileInfo;
+	RageFile *m_fileUserLog;
+	RageFile *m_fileTimeLog;
+	
+	// Convert RageLog severity to OpenTelemetry severity
+	opentelemetry::v2::logs::Severity ConvertToOtelSeverity(int level);
 };
 
 extern RageLog*	LOG;	// global and accessible from anywhere in our program
