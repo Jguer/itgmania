@@ -316,7 +316,6 @@ PrefsManager::PrefsManager() :
 	m_bForceLogFlush		( "ForceLogFlush",	false ),
 	m_bShowLogOutput		( "ShowLogOutput",	false ),
 #endif
-	m_bLogToOpenTelemetry   ( "LogToOpenTelemetry", true ),
 	m_bLogSkips			( "LogSkips",		false ),
 	m_bLogCheckpoints		( "LogCheckpoints",	false ),
 	m_bShowLoadingWindow		( "ShowLoadingWindow",	true ),
