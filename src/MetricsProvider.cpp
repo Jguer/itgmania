@@ -24,7 +24,7 @@
 #include "opentelemetry/sdk/metrics/view/instrument_selector_factory.h"
 #include "opentelemetry/sdk/metrics/view/meter_selector_factory.h"
 #include "opentelemetry/sdk/metrics/view/view_factory.h"
-// Add necessary includes for logging
+// Add necessary includes for logging and tracing
 #include "opentelemetry/logs/provider.h"
 #include "opentelemetry/sdk/logs/logger_provider.h"
 #include "opentelemetry/sdk/logs/logger_provider_factory.h"
@@ -33,6 +33,12 @@
 #include "opentelemetry/sdk/logs/exporter.h"
 #include "opentelemetry/sdk/logs/processor.h"
 #include "opentelemetry/sdk/logs/simple_log_record_processor_factory.h"
+#include "opentelemetry/exporters/otlp/otlp_http_exporter_factory.h"
+#include "opentelemetry/exporters/otlp/otlp_http_exporter_options.h"
+#include "opentelemetry/sdk/trace/simple_processor_factory.h"
+#include "opentelemetry/sdk/trace/tracer_provider.h"
+#include "opentelemetry/sdk/trace/tracer_provider_factory.h"
+#include "opentelemetry/trace/provider.h"
 
 MetricsProvider* METRICS = nullptr;
 
@@ -42,6 +48,8 @@ namespace metrics_api      = opentelemetry::metrics;
 namespace otlp_exporter    = opentelemetry::exporter::otlp;
 namespace logs_sdk         = opentelemetry::sdk::logs;
 namespace logs_api         = opentelemetry::logs;
+namespace trace_sdk        = opentelemetry::sdk::trace;
+namespace trace_api        = opentelemetry::trace;
 
 MetricsProvider::MetricsProvider()
 { 
@@ -80,27 +88,52 @@ MetricsProvider::MetricsProvider()
 	auto log_exporter = otlp_exporter::OtlpHttpLogRecordExporterFactory::Create(log_exporter_options);
 	
 	// Create a processor for the logger
-	auto processor = logs_sdk::SimpleLogRecordProcessorFactory::Create(std::move(log_exporter));
+	auto log_processor = logs_sdk::SimpleLogRecordProcessorFactory::Create(std::move(log_exporter));
 	
-	// Create a LoggerProvider
-	auto logger_provider = logs_sdk::LoggerProviderFactory::Create(std::move(processor));
+	// Create a LoggerProvider with the processor
+	auto logger_provider = logs_sdk::LoggerProviderFactory::Create(std::move(log_processor));
 	
 	// Set as the global LoggerProvider
-	auto shared_logger_provider = std::shared_ptr<logs_api::LoggerProvider>(std::move(logger_provider));
+	std::shared_ptr<logs_api::LoggerProvider> shared_logger_provider(std::move(logger_provider));
 	logs_api::Provider::SetLoggerProvider(shared_logger_provider);
 	
 	// Create a logger
 	m_logger = shared_logger_provider->GetLogger(name, version);
+
+	// Initialize tracer
+	otlp_exporter::OtlpHttpExporterOptions trace_exporter_options;
+	trace_exporter_options.url = "http://localhost:4317";
+	auto trace_exporter = otlp_exporter::OtlpHttpExporterFactory::Create(trace_exporter_options);
+	
+	// Create a span processor
+	auto span_processor = trace_sdk::SimpleSpanProcessorFactory::Create(std::move(trace_exporter));
+	
+	// Create a TracerProvider with the processor
+	auto tracer_provider_unique = trace_sdk::TracerProviderFactory::Create(std::move(span_processor));
+	
+	// Convert to shared_ptr to set global provider
+	std::shared_ptr<trace_api::TracerProvider> tracer_provider(std::move(tracer_provider_unique));
+	
+	// Set as the global TracerProvider
+	trace_api::Provider::SetTracerProvider(tracer_provider);
+	
+	// Create a tracer
+	m_tracer = tracer_provider->GetTracer(name, version);
 }
 
 MetricsProvider::~MetricsProvider()
 {
+  // Clean up meter provider
   std::shared_ptr<metrics_api::MeterProvider> none;
   metrics_api::Provider::SetMeterProvider(none);
   
   // Clean up logger provider
   std::shared_ptr<logs_api::LoggerProvider> none_logger;
   logs_api::Provider::SetLoggerProvider(none_logger);
+
+  // Clean up tracer provider
+  std::shared_ptr<trace_api::TracerProvider> none_tracer;
+  trace_api::Provider::SetTracerProvider(none_tracer);
 }
 
 opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Histogram<uint64_t>> MetricsProvider::GetHistogram()
@@ -121,4 +154,9 @@ opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Counter<uint64_
 opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::logs::Logger> MetricsProvider::GetLogger()
 {
     return m_logger;
+}
+
+opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::trace::Tracer> MetricsProvider::GetTracer()
+{
+    return m_tracer;
 }

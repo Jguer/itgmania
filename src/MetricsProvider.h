@@ -29,6 +29,12 @@ private:
 
     // get logger
     opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::logs::Logger> GetLogger();
+
+    // tracer member
+    opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::trace::Tracer> m_tracer;
+
+    // get tracer
+    opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::trace::Tracer> GetTracer();
 };
 
 extern MetricsProvider* METRICS;
