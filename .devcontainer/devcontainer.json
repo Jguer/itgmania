@@ -1,5 +1,7 @@
 {
 	"name": "ITGmania Development",
+	"capAdd": ["SYS_PTRACE"],
+	"securityOpt": ["seccomp=unconfined"],
 	"build": {
 		"dockerfile": "Dockerfile",
 		"context": ".."
@@ -7,14 +9,9 @@
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				"ms-vscode.cpptools-extension-pack",
-				"ms-vscode.cmake-tools",
-				"ms-vscode.cpptools-themes"
-			],
-			"settings": {
-				"cmake.configureOnOpen": true,
-				"C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
-			}
+				"ms-vscode.cpptools",
+				"ms-vscode.cmake-tools"
+			]
 		}
 	},
 	"remoteUser": "developer",

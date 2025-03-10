@@ -2682,6 +2682,7 @@ void Player::UpdateTapNotesMissedOlderThan( float fMissIfOlderThanSeconds )
 
 void Player::UpdateJudgedRows()
 {
+    auto span = METRICS->GetTracer()->StartSpan("Player::UpdateJudgedRows");
 	// Look ahead far enough to catch any rows judged early.
 	const int iEndRow = BeatToNoteRow( m_Timing->GetBeatFromElapsedTime( m_pPlayerState->m_Position.m_fMusicSeconds + GetMaxStepDistanceSeconds() ) );
 	bool bAllJudged = true;
@@ -2693,6 +2694,7 @@ void Player::UpdateJudgedRows()
 		for( ; !iter.IsAtEnd()  &&  iter.Row() <= iEndRow; ++iter )
 		{
 			int iRow = iter.Row();
+			auto span = METRICS->GetTracer()->StartSpan("Player::UpdateJudgedRows::Row");
 
 			// Do not judge arrows in WarpSegments or FakeSegments
 			if (!m_Timing->IsJudgableAtRow(iRow))
@@ -2733,6 +2735,7 @@ void Player::UpdateJudgedRows()
 				}
 				HandleTapRowScore( iRow );
 			}
+			span->End();
 		}
 	}
 
@@ -2829,6 +2832,7 @@ void Player::UpdateJudgedRows()
 			sound->Play(false);
 		}
 	}
+    span->End();
 }
 
 void Player::FlashGhostRow( int iRow )

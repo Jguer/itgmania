@@ -18,6 +18,10 @@ public:
     opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Histogram<uint64_t>> GetHistogram();
     // return a gauge for each TapNoteScore
     opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Gauge<int64_t>> GetGauge(std::string name);
+    // get tracer
+    opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::trace::Tracer> GetTracer();
+    // get logger
+    opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::logs::Logger> GetLogger();
 private:
     // store observable gauge, counter, and histogram
     opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Gauge<int64_t>> m_hitGauge;
@@ -27,14 +31,8 @@ private:
     // logger member
     opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::logs::Logger> m_logger;
 
-    // get logger
-    opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::logs::Logger> GetLogger();
-
     // tracer member
     opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::trace::Tracer> m_tracer;
-
-    // get tracer
-    opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::trace::Tracer> GetTracer();
 };
 
 extern MetricsProvider* METRICS;
