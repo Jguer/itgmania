@@ -6,6 +6,7 @@
 
 #include "opentelemetry/sdk/metrics/meter.h"
 #include "opentelemetry/sdk/logs/logger.h"
+#include "opentelemetry/sdk/trace/tracer.h"
 
 class MetricsProvider {
 public:

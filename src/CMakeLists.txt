@@ -448,8 +448,11 @@ endif()
 list(APPEND SMDATA_LINK_LIB "opentelemetry_trace"
     "opentelemetry_common"
     "opentelemetry_metrics"
+    "opentelemetry_trace"
+    "opentelemetry_logs"
     "opentelemetry_exporter_otlp_http"
     "opentelemetry_exporter_otlp_http_metric"
+    "opentelemetry_exporter_otlp_http_log"
     "opentelemetry_otlp_recordable"
     "opentelemetry_resources"
     )
