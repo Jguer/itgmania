@@ -4,6 +4,7 @@
 #include "RageTimer.h"
 #include "RageFile.h"
 #include "RageThreads.h"
+#include "MetricsProvider.h"
 
 #include <ctime>
 #include <map>
@@ -300,6 +301,27 @@ void RageLog::Write( int where, const RString &sLine )
 
 		if( m_bLogToDisk && g_fileLog->IsOpen() )
 			g_fileLog->PutLine( sStr );
+            
+		// Forward to OpenTelemetry logger if available
+		if (METRICS != nullptr) {
+			auto logger = METRICS->GetLogger();
+			if (logger != nullptr) {
+				// Convert string to compatible format for OpenTelemetry logging
+				opentelemetry::v2::nostd::string_view stringView(sStr.c_str());
+				
+				// Determine appropriate log level based on the 'where' flags
+				if (where & WRITE_LOUD) {
+					// Use warning level for loud messages
+					logger->Warn(stringView);
+				} else if (where & WRITE_TO_INFO) {
+					// Use info level for info messages
+					logger->Info(stringView);
+				} else {
+					// Use debug level for trace and other messages
+					logger->Debug(stringView);
+				}
+			}
+		}
 	}
 
 	if( where & WRITE_LOUD )
