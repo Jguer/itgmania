@@ -5,6 +5,7 @@
 #define OPENTELEMETRY_ABI_VERSION_NO 2
 
 #include "opentelemetry/sdk/metrics/meter.h"
+#include "opentelemetry/sdk/logs/logger.h"
 
 class MetricsProvider {
 public:
@@ -21,6 +22,12 @@ private:
     opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Gauge<int64_t>> m_hitGauge;
     opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Histogram<uint64_t>> m_hitHistogram;
     opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Counter<uint64_t>> m_hitCounter;
+    
+    // logger member
+    opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::logs::Logger> m_logger;
+
+    // get logger
+    opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::logs::Logger> GetLogger();
 };
 
 extern MetricsProvider* METRICS;
