@@ -1,5 +1,7 @@
 // MetricsProvider.cpp
 #include "MetricsProvider.h"
+#include "RageUtil.h"
+#include "PrefsManager.h"
 
 #include "opentelemetry/common/attribute_value.h"
 #include "opentelemetry/exporters/otlp/otlp_environment.h"
@@ -54,7 +56,7 @@ namespace trace_api        = opentelemetry::trace;
 MetricsProvider::MetricsProvider()
 { 
 	otlp_exporter::OtlpHttpMetricExporterOptions exporter_options;
-	exporter_options.url = "http://localhost:4317";
+	exporter_options.url = PREFSMAN->m_sOTLPMetricsURL.Get();
 	auto exporter = otlp_exporter::OtlpHttpMetricExporterFactory::Create(exporter_options);
 	std::string version{"1.2.0"};
 	std::string schema{"https://opentelemetry.io/schemas/1.2.0"};
@@ -84,7 +86,7 @@ MetricsProvider::MetricsProvider()
 
 	// Initialize logger
 	otlp_exporter::OtlpHttpLogRecordExporterOptions log_exporter_options;
-	log_exporter_options.url = "http://localhost:4317";
+	log_exporter_options.url = PREFSMAN->m_sOTLPLogsURL.Get();
 	auto log_exporter = otlp_exporter::OtlpHttpLogRecordExporterFactory::Create(log_exporter_options);
 	
 	// Create a processor for the logger
@@ -102,7 +104,7 @@ MetricsProvider::MetricsProvider()
 
 	// Initialize tracer
 	otlp_exporter::OtlpHttpExporterOptions trace_exporter_options;
-	trace_exporter_options.url = "http://localhost:4317";
+	trace_exporter_options.url = PREFSMAN->m_sOTLPTracesURL.Get();
 	auto trace_exporter = otlp_exporter::OtlpHttpExporterFactory::Create(trace_exporter_options);
 	
 	// Create a span processor
