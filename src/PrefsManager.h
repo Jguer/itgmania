@@ -338,6 +338,11 @@ public:
 	/** @brief Enable some quirky behavior used by some older versions of StepMania. */
 	Preference<bool>	m_bQuirksMode;
 
+	// OTLP configuration
+	Preference<RString>	m_sOTLPMetricsURL;
+	Preference<RString>	m_sOTLPLogsURL;
+	Preference<RString>	m_sOTLPTracesURL;
+
 	Preference<bool> m_custom_songs_enable;
 	Preference<unsigned int> m_custom_songs_max_count;
 	Preference<float> m_custom_songs_load_timeout;

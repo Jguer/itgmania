@@ -311,6 +311,11 @@ PrefsManager::PrefsManager() :
 
 	m_bQuirksMode			( "QuirksMode",		false ),
 
+	// OTLP configuration
+	m_sOTLPMetricsURL		( "OTLPMetricsURL",	"http://localhost:4317" ),
+	m_sOTLPLogsURL			( "OTLPLogsURL",	"http://localhost:4317" ),
+	m_sOTLPTracesURL		( "OTLPTracesURL",	"http://localhost:4317" ),
+
 	m_custom_songs_enable("CustomSongsEnable", false),
 	m_custom_songs_max_count("CustomSongsMaxCount", 1000), // No limit. -- 2 Unlimited
 	m_custom_songs_load_timeout("CustomSongsLoadTimeout", 5.f),
