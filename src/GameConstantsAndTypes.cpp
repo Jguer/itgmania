@@ -15,8 +15,6 @@
 #include <vector>
 
 
-RString StepsTypeToString( StepsType st );
-
 static std::vector<RString> GenerateRankingToFillInMarker()
 {
 	std::vector<RString> vRankings;
@@ -165,6 +163,8 @@ static const char *SortOrderNames[] = {
 	"Title",
 	"BPM",
 	"Popularity",
+	"PopularityP1",
+	"PopularityP2",
 	"TopGrades",
 	"TopP1Grades",
 	"TopP2Grades",
@@ -188,6 +188,8 @@ static const char *SortOrderNames[] = {
 	"Length",
 	"Roulette",
 	"Recent",
+	"RecentP1",
+	"RecentP2",
 };
 XToString( SortOrder );
 StringToX( SortOrder );
@@ -406,7 +408,7 @@ float DisplayBpms::GetMaxWithin(float highest) const
 	for (float const &f : vfBpms)
 	{
 		if( f != -1 )
-			fMax = clamp(std::max( fMax, f ), 0.0f, highest);
+			fMax = std::clamp(std::max( fMax, f ), 0.0f, highest);
 	}
 	return fMax;
 }

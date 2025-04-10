@@ -163,7 +163,7 @@ void HighScoreImpl::LoadFromNode( const XNode *pNode )
 	pNode->GetChildValue( "Disqualified",		bDisqualified);
 
 	// Validate input.
-	grade = clamp( grade, Grade_Tier01, Grade_Failed );
+	grade = std::clamp( grade, Grade_Tier01, Grade_Failed );
 }
 
 REGISTER_CLASS_TRAITS( HighScoreImpl, new HighScoreImpl(*pCopy) )
@@ -547,7 +547,7 @@ public:
 	static int GetHighestScoreOfName( T* p, lua_State *L )
 	{
 		RString name= SArg(1);
-		for(std::size_t i= 0; i < p->vHighScores.size(); ++i)
+		for(size_t i= 0; i < p->vHighScores.size(); ++i)
 		{
 			if(name == p->vHighScores[i].GetName())
 			{
@@ -562,8 +562,8 @@ public:
 	static int GetRankOfName( T* p, lua_State *L )
 	{
 		RString name= SArg(1);
-		std::size_t rank= 0;
-		for(std::size_t i= 0; i < p->vHighScores.size(); ++i)
+		size_t rank= 0;
+		for(size_t i= 0; i < p->vHighScores.size(); ++i)
 		{
 			if(name == p->vHighScores[i].GetName())
 			{

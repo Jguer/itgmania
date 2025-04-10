@@ -24,10 +24,6 @@
 #include <cmath>
 #include <vector>
 
-#ifdef _WIN32
-#include "archutils/Win32/ThreadPriorityHelper.h"
-#endif
-
 static RageTimer g_GameplayTimer;
 
 static Preference<bool> g_bNeverBoostAppPriority( "NeverBoostAppPriority", false );
@@ -44,11 +40,12 @@ void GameLoop::SetUpdateRate( float fUpdateRate )
 	g_fUpdateRate = fUpdateRate;
 }
 
+float GameLoop::GetUpdateRate() {
+	return g_fUpdateRate;
+}
+
 static void CheckGameLoopTimerSkips( float fDeltaTime )
 {
-	if( !PREFSMAN->m_bLogSkips )
-		return;
-
 	static int iLastFPS = 0;
 	int iThisFPS = DISPLAY->GetFPS();
 
@@ -142,7 +139,7 @@ namespace
 
 	void DoChangeTheme()
 	{
-		SAFE_DELETE( SCREENMAN );
+		RageUtil::SafeDelete( SCREENMAN );
 		TEXTUREMAN->DoDelayedDelete();
 
 		// In case the previous theme overloaded class bindings, reinitialize them.
@@ -195,7 +192,7 @@ namespace
 
 		if(theme_changing)
 		{
-			SAFE_DELETE(SCREENMAN);
+			RageUtil::SafeDelete(SCREENMAN);
 			TEXTUREMAN->DoDelayedDelete();
 			LUA->RegisterTypes();
 			THEME->SwitchThemeAndLanguage(g_NewTheme, THEME->GetCurLanguage(),
@@ -246,27 +243,44 @@ namespace
 		g_NewTheme= RString();
 	}
 }
-static bool m_bUpdatedDuringVBLANK = false;
+
 void GameLoop::UpdateAllButDraw(bool bRunningFromVBLANK)
 {
-	//if we are running our once per frame routine and we were already run from VBLANK, we did the work already
+	// Flag to indicate whether an update has been processed during the VBLANK period.
+	static bool m_bUpdatedDuringVBLANK = false;
+
+	// If we're running from VBLANK, and we've already updated during the VBLANK period,
+	// don't update again. This is to prevent multiple updates during the same VBLANK period.
 	if (!bRunningFromVBLANK && m_bUpdatedDuringVBLANK)
 	{
 		m_bUpdatedDuringVBLANK = false;
-		return; //would it kill us to run it again or do we want to draw asap?
+		return;
 	}
 
-	//if vblank called us, we will tell the game loop we received an update for the frame it wants to process
-	if (bRunningFromVBLANK)	m_bUpdatedDuringVBLANK = true;
-	else m_bUpdatedDuringVBLANK = false;
+	// If we're running from VBLANK, indicate we've updated during the VBLANK period.
+	// Otherwise, make sure the flag is cleared.
+	if (bRunningFromVBLANK)
+	{
+		m_bUpdatedDuringVBLANK = true;
+	}
+	else
+	{
+		m_bUpdatedDuringVBLANK = false;
+	}
 
-	// Update our stuff
-	float fDeltaTime = g_GameplayTimer.GetDeltaTime();
+	// If the constant update delta is set, use that value. Otherwise, use the delta
+	// time from the gameplay timer.
+	float fDeltaTime = (g_fConstantUpdateDeltaSeconds > 0) 
+		? g_fConstantUpdateDeltaSeconds 
+		: g_GameplayTimer.GetDeltaTime();
 
-	if (g_fConstantUpdateDeltaSeconds > 0)
-		fDeltaTime = g_fConstantUpdateDeltaSeconds;
-
-	CheckGameLoopTimerSkips(fDeltaTime);
+	// Use a static boolean to check the preference once per game launch.
+	// This is a rarely used debug feature, so we try to skip it if possible.
+	static bool bLogSkips = PREFSMAN->m_bLogSkips;
+	if (bLogSkips)
+	{
+		CheckGameLoopTimerSkips(fDeltaTime);
+	}
 
 	fDeltaTime *= g_fUpdateRate;
 
@@ -274,8 +288,8 @@ void GameLoop::UpdateAllButDraw(bool bRunningFromVBLANK)
 	SOUNDMAN->Update();
 
 	/* Update song beat information -before- calling update on all the classes that
-	* depend on it. If you don't do this first, the classes are all acting on old
-	* information and will lag. (but no longer fatally, due to timestamping -glenn) */
+	 * depend on it. If you don't do this first, the classes are all acting on old
+	 * information and will lag. (but no longer fatally, due to timestamping -glenn) */
 	SOUND->Update(fDeltaTime);
 	TEXTUREMAN->Update(fDeltaTime);
 	GAMESTATE->Update(fDeltaTime);
@@ -283,21 +297,15 @@ void GameLoop::UpdateAllButDraw(bool bRunningFromVBLANK)
 	MEMCARDMAN->Update();
 
 	/* Important: Process input AFTER updating game logic, or input will be
-	* acting on song beat from last frame */
+	 * acting on song beat from last frame */
 	HandleInputEvents(fDeltaTime);
 
-	//bandaid for low max audio sample counter
-	SOUNDMAN->low_sample_count_workaround();
+	// Update the lights
 	LIGHTSMAN->Update(fDeltaTime);
-
 }
-
-
 
 void GameLoop::RunGameLoop()
 {
-	static int CheckInputDevicesCounter = 0;
-	
 	/* People may want to do something else while songs are loading, so do
 	 * this after loading songs. */
 	if( ChangeAppPri() )
@@ -318,13 +326,12 @@ void GameLoop::RunGameLoop()
 
 		UpdateAllButDraw(false);
 		
-		// This loop runs every frame, so the input devices will be checked every 500 frames.
-		if (CheckInputDevicesCounter % (500) == 0)
+		// Check input devices every 255 frames (uint8_t can hold 0-255).
+		static uint8_t i_CheckInputDevices = 0;
+		if (++i_CheckInputDevices == 0)
 		{
 			CheckInputDevices();
-			CheckInputDevicesCounter = 0;
 		}
-		CheckInputDevicesCounter++;
 		
 		SCREENMAN->Draw();
 	}
@@ -413,13 +420,6 @@ void ConcurrentRenderer::RenderThread()
 
 		if( m_State == RENDERING_START )
 		{
-#ifdef _WIN32
-			bool setThreadSuccess = BoostThreadPriorityToHighest();
-			if (!setThreadSuccess)
-			{
-				ASSERT_M(0, "Failed to set thread priority to highest.");
-			}
-#endif
 			/* We're starting to render. Set up, and then kick the event to wake
 			 * up the calling thread. */
 			DISPLAY->BeginConcurrentRendering();

@@ -47,10 +47,12 @@
 static Preference<float> g_iDefaultRecordLength( "DefaultRecordLength", 4 );
 static Preference<bool> g_bEditorShowBGChangesPlay( "EditorShowBGChangesPlay", true );
 
-/** @brief How long must the button be held to generate a hold in record mode? */
-const float record_hold_default= 0.3f;
+/** @brief How long must the button be held to generate a hold in record mode?
+  * Note this must be a float, if it isn't then record mode can't tell if you're
+  * trying to input a hold or not. */
+constexpr static float record_hold_default= 0.3f;
 float record_hold_seconds = record_hold_default;
-const float time_between_autosave= 300.0f; // 5 minutes. -Kyz
+constexpr static float time_between_autosave= 300.0f; // 5 minutes. -Kyz
 
 #define PLAYER_X		(SCREEN_CENTER_X)
 #define PLAYER_Y		(SCREEN_CENTER_Y)
@@ -549,7 +551,7 @@ void ScreenEdit::LoadKeymapSectionIntoMappingsMember(XNode const* section, MapEd
 			attr->second->GetValue(joined_names);
 			std::vector<RString> key_names;
 			split(joined_names, DEVICE_INPUT_SEPARATOR, key_names, false);
-			for(std::size_t k= 0; k < key_names.size() && k < NUM_EDIT_TO_DEVICE_SLOTS; ++k)
+			for(size_t k= 0; k < key_names.size() && k < NUM_EDIT_TO_DEVICE_SLOTS; ++k)
 			{
 				DeviceInput devi;
 				devi.FromString(key_names[k]);
@@ -1380,7 +1382,7 @@ static float g_fLastInsertAttackDurationSeconds = -1;
 static float g_fLastInsertAttackPositionSeconds = -1;
 static BackgroundLayer g_CurrentBGChangeLayer = BACKGROUND_LAYER_Invalid;
 
-static void SetDefaultEditorNoteSkin( std::size_t num, RString &sNameOut, RString &defaultValueOut )
+static void SetDefaultEditorNoteSkin( size_t num, RString &sNameOut, RString &defaultValueOut )
 {
 	sNameOut = ssprintf( "EditorNoteSkinP%d", int(num + 1) );
 
@@ -1404,9 +1406,10 @@ void ScreenEdit::Init()
 	GAMESTATE->m_bInStepEditor = true;
 
 	SubscribeToMessage( "Judgment" );
+	main_player_ = GAMESTATE->GetMasterPlayerNumber();
 
 	ASSERT( GAMESTATE->m_pCurSong != nullptr );
-	ASSERT( GAMESTATE->m_pCurSteps[PLAYER_1] != nullptr );
+	ASSERT( GAMESTATE->m_pCurSteps[main_player_] != nullptr );
 
 	EDIT_MODE.Load( m_sName, "EditMode" );
 	ScreenWithMenuElements::Init();
@@ -1422,14 +1425,10 @@ void ScreenEdit::Init()
 	m_InputPlayerNumber = PLAYER_INVALID;
 
 	if( GAMESTATE->GetCurrentStyle(GAMESTATE->GetMasterPlayerNumber())->m_StyleType == StyleType_TwoPlayersSharedSides )
-		m_InputPlayerNumber = PLAYER_1;
-
-	FOREACH_PlayerNumber( p )
-		GAMESTATE->m_bSideIsJoined[p] = false;
-	GAMESTATE->m_bSideIsJoined[PLAYER_1] = true;
+		m_InputPlayerNumber = main_player_;
 
 	m_pSong = GAMESTATE->m_pCurSong;
-	m_pSteps = GAMESTATE->m_pCurSteps[PLAYER_1];
+	m_pSteps = GAMESTATE->m_pCurSteps[main_player_];
 
 	/*	The user will most likely switch into Step Timing after laying down
 		some initial notes. It also throws off many people at first glance.
@@ -1476,20 +1475,22 @@ void ScreenEdit::Init()
 				                 ModsLevel_Preferred, m_sNoteSkin, sNoteSkin );
 		}
 	}
-	m_PlayerStateEdit.SetPlayerNumber(PLAYER_1);
+
+	m_PlayerStateEdit.SetPlayerNumber(main_player_);
 	m_PlayerStateEdit.m_NotefieldZoom= 1.0f;
+
 	// If we always go with the GAMESTATE NoteSkin, we will have fun effects
 	// like Vivid or Flat in the editor notefield. This is not conducive to
 	// productive editing.
 	// todo: We should allow certain noteskins (note-colored/rhythm) to be
 	// displayed. (Perhaps this should be a noteskin metric.) -aj
-	if( NOTESKIN->DoesNoteSkinExist( EDITOR_NOTE_SKINS[PLAYER_1].Get() ) )
+	if( NOTESKIN->DoesNoteSkinExist( EDITOR_NOTE_SKINS[main_player_].Get() ) )
 	{
-		PO_GROUP_ASSIGN( m_PlayerStateEdit.m_PlayerOptions, ModsLevel_Stage, m_sNoteSkin, EDITOR_NOTE_SKINS[PLAYER_1].Get() );
+		PO_GROUP_ASSIGN( m_PlayerStateEdit.m_PlayerOptions, ModsLevel_Stage, m_sNoteSkin, EDITOR_NOTE_SKINS[main_player_].Get() );
 	}
 	else
 	{
-		PO_GROUP_ASSIGN( m_PlayerStateEdit.m_PlayerOptions, ModsLevel_Stage, m_sNoteSkin, GAMESTATE->m_pPlayerState[PLAYER_1]->m_PlayerOptions.GetStage().m_sNoteSkin );
+		PO_GROUP_ASSIGN( m_PlayerStateEdit.m_PlayerOptions, ModsLevel_Stage, m_sNoteSkin, GAMESTATE->m_pPlayerState[main_player_]->m_PlayerOptions.GetStage().m_sNoteSkin );
 	}
 	m_PlayerStateEdit.m_PlayerOptions.FromString( ModsLevel_Stage, EDIT_MODIFIERS );
 
@@ -1504,12 +1505,11 @@ void ScreenEdit::Init()
 
 	m_NoteDataRecord.SetNumTracks( m_NoteDataEdit.GetNumTracks() );
 	m_NoteFieldRecord.SetXY( RECORD_X, RECORD_Y );
-	m_NoteFieldRecord.Init( GAMESTATE->m_pPlayerState[PLAYER_1], PLAYER_HEIGHT );
+	m_NoteFieldRecord.Init( GAMESTATE->m_pPlayerState[main_player_], PLAYER_HEIGHT );
 	m_NoteFieldRecord.Load( &m_NoteDataRecord, -120, 425 );
 	this->AddChild( &m_NoteFieldRecord );
 
 	m_EditState = EditState_Invalid;
-	TransitionEditState( STATE_EDITING );
 
 	m_bRemoveNoteButtonDown = false;
 
@@ -1527,12 +1527,30 @@ void ScreenEdit::Init()
 		SetDirty(true);
 	}
 
-	m_Player->Init( "Player", GAMESTATE->m_pPlayerState[PLAYER_1], nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr );
-	m_Player->CacheAllUsedNoteSkins();
-	GAMESTATE->m_pPlayerState[PLAYER_1]->m_PlayerController = PC_HUMAN;
-	m_Player->SetXY( PLAYER_X, PLAYER_Y );
-	m_Player->SetZoom( SCREEN_HEIGHT/480 );
-	this->AddChild( m_Player );
+
+	// There are two conditions for centering the notefield.
+	// 1. We're in EditMode
+	// 2. We're in PracticeMode, the preference is enabled,
+	//      sylte is OnePlayerOneSide, and the theme allows it.
+	//
+	// If the "center_enabled" check is modified, also modify
+	// ScreenGameplay::Center1Player().
+	ThemeMetric<bool> allow_center;
+	allow_center.Load("ScreenGameplay", "AllowCenter1Player");
+	bool center_enabled = (Preference<bool>::GetPreferenceByName("Center1Player")->Get()
+		&& GAMESTATE->GetCurrentStyle(PLAYER_INVALID)->m_StyleType
+			== StyleType_OnePlayerOneSide)
+		&& GAMESTATE->m_PlayMode != PLAY_MODE_BATTLE
+		&& GAMESTATE->m_PlayMode != PLAY_MODE_RAVE
+		&& allow_center;
+
+	bool edit_mode_screen = (m_sName == "ScreenEdit");
+
+	player_manager_.SetCenter(edit_mode_screen || center_enabled);
+
+	player_manager_.AddPlayers(m_NoteDataEdit);
+	player_manager_.AddPlayersToActorFrame(*this);
+	TransitionEditState(STATE_EDITING);
 
 	this->AddChild( &m_Foreground );
 
@@ -1609,8 +1627,7 @@ void ScreenEdit::PlayTicks()
 {
 	if( m_EditState != STATE_PLAYING )
 		return;
-
-	m_GameplayAssist.PlayTicks( m_Player->GetNoteData(), m_Player->GetPlayerState() );
+	player_manager_.PlayTicks(m_GameplayAssist);
 }
 
 static ThemeMetric<float> FADE_IN_PREVIEW("ScreenEdit", "FadeInPreview");
@@ -1660,14 +1677,14 @@ void ScreenEdit::Update( float fDeltaTime )
 	if( m_pSoundMusic->IsPlaying() )
 	{
 		RageTimer tm;
-		const float fSeconds = m_pSoundMusic->GetPositionSeconds( nullptr, &tm );
+		const float fSeconds = m_pSoundMusic->GetPositionSeconds( &tm );
 		GAMESTATE->UpdateSongPosition( fSeconds, GAMESTATE->m_pCurSong->m_SongTiming, tm );
 	}
 
 	if(m_EditState == STATE_EDITING)
 	{
 		if(IsDirty() && m_next_autosave_time > -1.0f &&
-			RageTimer::GetTimeSinceStartFast() > m_next_autosave_time)
+			RageTimer::GetTimeSinceStart() > m_next_autosave_time)
 		{
 			PerformSave(true);
 		}
@@ -1683,7 +1700,7 @@ void ScreenEdit::Update( float fDeltaTime )
 			std::vector<GameInput> GameI;
 			GAMESTATE->GetCurrentStyle(GAMESTATE->GetMasterPlayerNumber())->StyleInputToGameInput( t, PLAYER_1, GameI );
 			float fSecsHeld= 0.0f;
-			for(std::size_t i= 0; i < GameI.size(); ++i)
+			for(size_t i= 0; i < GameI.size(); ++i)
 			{
 				fSecsHeld= std::max(fSecsHeld, INPUTMAPPER->GetSecsHeld(GameI[i]));
 			}
@@ -2263,7 +2280,7 @@ bool ScreenEdit::InputEdit( const InputEventPlus &input, EditButton EditB )
 				INVERT_SCROLL_BUTTONS ? --iSpeed : ++iSpeed;
 				break;
 			}
-			iSpeed = clamp( iSpeed, 0, (int) ARRAYLEN(fSpeeds)-1 );
+			iSpeed = std::clamp( iSpeed, 0, (int) ARRAYLEN(fSpeeds)-1 );
 
 			if( fSpeeds[iSpeed] != fScrollSpeed )
 			{
@@ -3229,34 +3246,9 @@ bool ScreenEdit::InputPlay( const InputEventPlus &input, EditButton EditB )
 	}
 
 	GameButtonType gbt = GAMESTATE->m_pCurGame->GetPerButtonInfo(input.GameI.button)->m_gbt;
-
-	if( GamePreferences::m_AutoPlay == PC_HUMAN && GAMESTATE->m_pPlayerState[PLAYER_1]->m_PlayerOptions.GetCurrent().m_fPlayerAutoPlay == 0 )
-	{
-		const int iCol = GAMESTATE->GetCurrentStyle(GAMESTATE->GetMasterPlayerNumber())->GameInputToColumn( input.GameI );
-		bool bRelease = input.type == IET_RELEASE;
-		switch( input.pn )
-		{
-		case PLAYER_2:
-			// ignore player 2 input unless this mode requires it
-			if( GAMESTATE->GetCurrentStyle(GAMESTATE->GetMasterPlayerNumber())->m_StyleType != StyleType_TwoPlayersSharedSides )
-				break;
-
-			[[fallthrough]];
-		case PLAYER_1:
-			{
-				switch( gbt )
-				{
-				case GameButtonType_Step:
-					if( iCol != -1 )
-						m_Player->Step( iCol, -1, input.DeviceI.ts, false, bRelease );
-					return true;
-				default:
-					break;
-				}
-			}
-		default: break;
-		}
-	}
+	if (player_manager_.HandleGameplayInput(input, gbt)) {
+		return true;
+	};
 
 	if( gbt == GameButtonType_Menu  &&  input.type == IET_FIRST_PRESS )
 	{
@@ -3347,7 +3339,7 @@ void ScreenEdit::TransitionEditState( EditState em )
 		case STATE_PLAYING:
 			AdjustSync::HandleSongEnd();
 			if (!GAMESTATE->m_bIsUsingStepTiming)
-				GAMESTATE->m_pCurSteps[PLAYER_1]->m_Timing = backupStepTiming;
+				GAMESTATE->m_pCurSteps[main_player_]->m_Timing = backupStepTiming;
 			if( AdjustSync::IsSyncDataChanged() )
 				ScreenSaveSync::PromptSaveSync();
 			break;
@@ -3374,12 +3366,14 @@ void ScreenEdit::TransitionEditState( EditState em )
 	if( em != STATE_EDITING )
 	{
 		// Stop displaying course attacks, if any.
-		GAMESTATE->m_pPlayerState[PLAYER_1]->RemoveActiveAttacks();
-		// Load the player's default PlayerOptions.
-		GAMESTATE->m_pPlayerState[PLAYER_1]->RebuildPlayerOptionsFromActiveAttacks();
+		FOREACH_EnabledPlayer(pn) {
+			GAMESTATE->m_pPlayerState[pn]->RemoveActiveAttacks();
+			// Load the player's default PlayerOptions.
+			GAMESTATE->m_pPlayerState[pn]->RebuildPlayerOptionsFromActiveAttacks();
 
-		// Snap to current options.
-		GAMESTATE->m_pPlayerState[PLAYER_1]->m_PlayerOptions.SetCurrentToLevel( ModsLevel_Stage );
+			// Snap to current options.
+			GAMESTATE->m_pPlayerState[pn]->m_PlayerOptions.SetCurrentToLevel(ModsLevel_Stage);
+		}
 	}
 
 	switch( em )
@@ -3413,8 +3407,8 @@ void ScreenEdit::TransitionEditState( EditState em )
 		{
 			// Substitute the song timing for the step timing during
 			// preview if we're in song mode
-			backupStepTiming = GAMESTATE->m_pCurSteps[PLAYER_1]->m_Timing;
-			GAMESTATE->m_pCurSteps[PLAYER_1]->m_Timing.Clear();
+			backupStepTiming = GAMESTATE->m_pCurSteps[main_player_]->m_Timing;
+			GAMESTATE->m_pCurSteps[main_player_]->m_Timing.Clear();
 		}
 
 		/* Reset the note skin, in case preferences have changed. */
@@ -3434,28 +3428,25 @@ void ScreenEdit::TransitionEditState( EditState em )
 	case STATE_PLAYING:
 		// If we're in course display mode, set that up.
 		SetupCourseAttacks();
+		player_manager_.SetupAutoplay();
+		player_manager_.ReloadNoteData(m_NoteDataEdit);
 
-		m_Player.Load( m_NoteDataEdit );
-
-		if( GAMESTATE->m_pPlayerState[PLAYER_1]->m_PlayerOptions.GetCurrent().m_fPlayerAutoPlay != 0 )
-			GAMESTATE->m_pPlayerState[PLAYER_1]->m_PlayerController = PC_AUTOPLAY;
-		else
-			GAMESTATE->m_pPlayerState[PLAYER_1]->m_PlayerController = GamePreferences::m_AutoPlay;
-
-		if( g_bEditorShowBGChangesPlay )
+		if (g_bEditorShowBGChangesPlay)
 		{
 			/* FirstBeat affects backgrounds, so commit changes to memory (not to disk)
 			 * and recalc it. */
-			Steps* pSteps = GAMESTATE->m_pCurSteps[PLAYER_1];
-			ASSERT( pSteps != nullptr );
-			pSteps->SetNoteData( m_NoteDataEdit );
-			m_pSong->ReCalculateRadarValuesAndLastSecond();
+			Steps* pSteps = GAMESTATE->m_pCurSteps[main_player_];
+			ASSERT(pSteps != nullptr);
+			pSteps->SetNoteData(m_NoteDataEdit);
+			m_pSong->ReCalculateStepStatsAndLastSecond();
 
+			// TODO: Background videos don't support seeking, when they do, make sure
+			// to load the appropriate part of the video.
 			m_Background.Unload();
-			m_Background.LoadFromSong( m_pSong );
+			m_Background.LoadFromSong(m_pSong);
 
 			m_Foreground.Unload();
-			m_Foreground.LoadFromSong( m_pSong );
+			m_Foreground.LoadFromSong(m_pSong);
 		}
 
 		break;
@@ -3489,7 +3480,8 @@ void ScreenEdit::TransitionEditState( EditState em )
 	m_SnapDisplay.SetVisible( em == STATE_EDITING );
 	m_NoteFieldEdit.SetVisible( em == STATE_EDITING );
 	m_NoteFieldRecord.SetVisible( em == STATE_RECORDING  ||  em == STATE_RECORDING_PAUSED );
-	m_Player->SetVisible( em == STATE_PLAYING );
+
+	player_manager_.SetVisible(em == STATE_PLAYING);
 	m_Foreground.SetVisible( g_bEditorShowBGChangesPlay  &&  em != STATE_EDITING );
 
 	switch( em )
@@ -3954,7 +3946,7 @@ void ScreenEdit::HandleScreenMessage( const ScreenMessage SM )
 	{
 		// The options may have changed the note skin.
 		m_NoteFieldRecord.CacheAllUsedNoteSkins();
-		m_Player->CacheAllUsedNoteSkins();
+		player_manager_.CacheAllUsedNoteSkins();
 
 		// stop any music that screen may have been playing
 		SOUND->StopMusic();
@@ -4362,7 +4354,7 @@ void ScreenEdit::HandleScreenMessage( const ScreenMessage SM )
 	else if( SM == SM_AutoSaveSuccessful )
 	{
 		LOG->Trace("AutoSave successful.");
-		m_next_autosave_time= RageTimer::GetTimeSinceStartFast() + time_between_autosave;
+		m_next_autosave_time= RageTimer::GetTimeSinceStart() + time_between_autosave;
 		SCREENMAN->SystemMessage(AUTOSAVE_SUCCESSFUL);
 	}
 	else if( SM == SM_SaveFailed ) // save failed; stay in the editor
@@ -4391,7 +4383,7 @@ void ScreenEdit::HandleScreenMessage( const ScreenMessage SM )
 		for (Steps *s : apSteps)
 		{
 			// If we're not on the same style, let it go.
-			if( GAMESTATE->m_pCurSteps[PLAYER_1]->m_StepsType != s->m_StepsType )
+			if( GAMESTATE->m_pCurSteps[main_player_]->m_StepsType != s->m_StepsType )
 				continue;
 			// If autogenned, it isn't being saved.
 			if( s->IsAutogen() )
@@ -4411,8 +4403,8 @@ void ScreenEdit::HandleScreenMessage( const ScreenMessage SM )
 			pSong->DeleteSteps( pSteps );
 			if( m_pSteps == pSteps )
 				m_pSteps = nullptr;
-			if( GAMESTATE->m_pCurSteps[PLAYER_1].Get() == pSteps )
-				GAMESTATE->m_pCurSteps[PLAYER_1].Set(nullptr);
+			if( GAMESTATE->m_pCurSteps[main_player_].Get() == pSteps )
+				GAMESTATE->m_pCurSteps[main_player_].Set(nullptr);
 		}
 
 
@@ -4445,7 +4437,7 @@ void ScreenEdit::SetDirty(bool dirty)
 	{
 		if(!m_dirty)
 		{
-			m_next_autosave_time= RageTimer::GetTimeSinceStartFast() + time_between_autosave;
+			m_next_autosave_time= RageTimer::GetTimeSinceStart() + time_between_autosave;
 		}
 	}
 	else
@@ -4480,7 +4472,7 @@ void ScreenEdit::PerformSave(bool autosave)
 				ASSERT( m_pSteps->IsAnEdit() );
 
 				RString sError;
-				m_pSteps->CalculateRadarValues( m_pSong->m_fMusicLengthSeconds );
+				m_pSteps->CalculateStepStats( m_pSong->m_fMusicLengthSeconds );
 				if( !NotesWriterSM::WriteEditFileToMachine(m_pSong, m_pSteps, sError) )
 				{
 					ScreenPrompt::Prompt( SM_None, sError );
@@ -5028,7 +5020,7 @@ static bool ConvertMappingInputToMapping(RString const& mapstr, int* mapping, RS
 {
 	std::vector<RString> mapping_input;
 	split(mapstr, ",", mapping_input);
-	std::size_t tracks_for_type= GAMEMAN->GetStepsTypeInfo(GAMESTATE->m_pCurSteps[0]->m_StepsType).iNumTracks;
+	size_t tracks_for_type= GAMEMAN->GetStepsTypeInfo(GAMESTATE->m_pCurSteps[0]->m_StepsType).iNumTracks;
 	if(mapping_input.size() > tracks_for_type)
 	{
 		error= TOO_MANY_TRACKS;
@@ -5036,7 +5028,7 @@ static bool ConvertMappingInputToMapping(RString const& mapstr, int* mapping, RS
 	}
 	// mapping_input.size() < tracks_for_type is not checked because
 	// unspecified tracks are mapped directly. -Kyz
-	std::size_t track= 0;
+	size_t track= 0;
 	// track will be used for filling in the unspecified part of the mapping.
 	for(; track < mapping_input.size(); ++track)
 	{
@@ -6164,13 +6156,14 @@ void ScreenEdit::SetupCourseAttacks()
 
 void ScreenEdit::CopyToLastSave()
 {
-	ASSERT( GAMESTATE->m_pCurSong != nullptr );
-	ASSERT( GAMESTATE->m_pCurSteps[PLAYER_1] != nullptr );
+	ASSERT(GAMESTATE->m_pCurSteps[main_player_] != nullptr);
+
 	m_SongLastSave = *GAMESTATE->m_pCurSong;
 	m_vStepsLastSave.clear();
-	const std::vector<Steps*> &vSteps = GAMESTATE->m_pCurSong->GetStepsByStepsType( GAMESTATE->m_pCurSteps[PLAYER_1]->m_StepsType );
-	for (Steps *it : vSteps)
-		m_vStepsLastSave.push_back( *it );
+	const std::vector<Steps*>& vSteps = GAMESTATE->m_pCurSong->GetStepsByStepsType(GAMESTATE->m_pCurSteps[main_player_]->m_StepsType);
+	for (Steps* it : vSteps) {
+		m_vStepsLastSave.push_back(*it);
+	}
 }
 
 void ScreenEdit::CopyFromLastSave()
@@ -6179,10 +6172,11 @@ void ScreenEdit::CopyFromLastSave()
 	// 1) No steps can be created by ScreenEdit
 	// 2) No steps can be deleted by ScreenEdit (except possibly when we exit)
 	*GAMESTATE->m_pCurSong = m_SongLastSave;
-	const std::vector<Steps*> &vSteps = GAMESTATE->m_pCurSong->GetStepsByStepsType( GAMESTATE->m_pCurSteps[PLAYER_1]->m_StepsType );
-	ASSERT_M( vSteps.size() == m_vStepsLastSave.size(), ssprintf("Step sizes don't match: %d, %d", int(vSteps.size()), int(m_vStepsLastSave.size())) );
-	for( unsigned i = 0; i < vSteps.size(); ++i )
+	const std::vector<Steps*>& vSteps = GAMESTATE->m_pCurSong->GetStepsByStepsType(GAMESTATE->m_pCurSteps[main_player_]->m_StepsType);
+	ASSERT_M(vSteps.size() == m_vStepsLastSave.size(), ssprintf("Step sizes don't match: %d, %d", int(vSteps.size()), int(m_vStepsLastSave.size())));
+	for (unsigned i = 0; i < vSteps.size(); ++i) {
 		*vSteps[i] = m_vStepsLastSave[i];
+	}
 }
 
 void ScreenEdit::RevertFromDisk()

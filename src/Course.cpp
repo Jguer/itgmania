@@ -585,7 +585,7 @@ bool Course::GetTrailUnsorted( StepsType st, CourseDifficulty cd, Trail &trail )
 			if( cd != Difficulty_Medium  &&  !e->bNoDifficult )
 			{
 				Difficulty new_dc = ( Difficulty )( dc + cd - Difficulty_Medium );
-				new_dc = clamp( new_dc, ( Difficulty )0, ( Difficulty )( Difficulty_Edit - 1 ) );
+				new_dc = std::clamp( new_dc, ( Difficulty )0, ( Difficulty )( Difficulty_Edit - 1 ) );
 				/*
 				// re-edit this code to work using the metric.
 				Difficulty new_dc;
@@ -790,7 +790,7 @@ void Course::GetTrailUnsortedEndless( const std::vector<CourseEntry> &entries, T
 		ASSERT(e->iChooseIndex >= 0);
 		// If we're trying to pick BEST100 when only 99 songs exist,
 		// we have a problem, so bail out
-		if (static_cast<std::size_t>(e->iChooseIndex) >= vpSongs.size()) {
+		if (static_cast<size_t>(e->iChooseIndex) >= vpSongs.size()) {
 			continue;
 		}
 
@@ -817,7 +817,7 @@ void Course::GetTrailUnsortedEndless( const std::vector<CourseEntry> &entries, T
 			{
 				new_dc = cd;
 			}
-			new_dc = clamp( new_dc, ( Difficulty )0, ( Difficulty )( Difficulty_Edit - 1 ) );
+			new_dc = std::clamp( new_dc, ( Difficulty )0, ( Difficulty )( Difficulty_Edit - 1 ) );
 			/*
 			// re-edit this code to work using the metric.
 			Difficulty new_dc;
@@ -1317,7 +1317,7 @@ public:
 	DEFINE_METHOD( GetCourseType, GetCourseType() )
 	static int GetCourseEntry(T* p, lua_State* L)
 	{
-		std::size_t id= static_cast<std::size_t>(IArg(1));
+		size_t id= static_cast<size_t>(IArg(1));
 		if(id >= p->m_vEntries.size())
 		{
 			lua_pushnil(L);

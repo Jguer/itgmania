@@ -4,23 +4,24 @@
 #include "RageUtil.h"
 #include "RageTimer.h"
 
+#include <cinttypes>
 #include <climits>
 #include <cmath>
 #include <cstdint>
 #include <list>
 
-/* The number of frames we should keep pos_map data for.
-This comes out to about ~800kb in audio frames, assuming 44.1khz.
-File bitrate, metadata, etc will factor in here. If the queue is
-TOO big it will make things slow, but 200k frames is no problem.
-Making the queue larger than 200k hasn't been tested yet. */
-const int pos_map_backlog_frames = 200000;
+// NOTE(sukibaby): The number of frames we should keep pos_map data for.
+// File bitrate, metadata, etc will factor in here. 80k is a safe value
+// to provide a good balance of stability and low latency. It is stable
+// up to 200k, but increased latency is the main reason not to increase
+// this to a very large number. 
+static int pos_map_backlog_frames = 80000;
 
 struct pos_map_t
 {
-	std::int64_t m_iSourceFrame;
-	std::int64_t m_iDestFrame;
-	std::int64_t m_iFrames;
+	int64_t m_iSourceFrame;
+	int64_t m_iDestFrame;
+	int64_t m_iFrames;
 	double m_fSourceToDestRatio;
 
 	pos_map_t() { m_iSourceFrame = 0; m_iDestFrame = 0; m_iFrames = 0; m_fSourceToDestRatio = 1.0; }
@@ -50,14 +51,16 @@ pos_map_queue::pos_map_queue( const pos_map_queue &cpy )
 
 pos_map_queue &pos_map_queue::operator=( const pos_map_queue &rhs )
 {
-	if (this != &rhs){
-		delete m_pImpl;
-		m_pImpl = new pos_map_impl( *rhs.m_pImpl );
+	if (this != &rhs)
+	{
+		pos_map_impl* tempImpl = new pos_map_impl(*rhs.m_pImpl);
+		std::swap(m_pImpl, tempImpl);
+		delete tempImpl;
 	}
 	return *this;
 }
 
-void pos_map_queue::Insert(std::int64_t iSourceFrame, std::int64_t iFrames, std::int64_t iDestFrame, double fSourceToDestRatio)
+void pos_map_queue::Insert(int64_t iSourceFrame, int64_t iFrames, int64_t iDestFrame, double fSourceToDestRatio)
 {
 	bool merged = false;
 	if (!m_pImpl->m_Queue.empty())
@@ -93,7 +96,7 @@ void pos_map_queue::Insert(std::int64_t iSourceFrame, std::int64_t iFrames, std:
 void pos_map_impl::Cleanup()
 {
 	std::list<pos_map_t>::iterator it = m_Queue.end();
-	std::int64_t iTotalFrames = 0;
+	int64_t iTotalFrames = 0;
 	// Scan backwards until we have at least pos_map_backlog_frames.
 	while (iTotalFrames < pos_map_backlog_frames)
 	{
@@ -106,20 +109,15 @@ void pos_map_impl::Cleanup()
 	m_Queue.erase(m_Queue.begin(), it);
 }
 
-std::int64_t pos_map_queue::Search( std::int64_t iSourceFrame, bool *bApproximate ) const
+int64_t pos_map_queue::Search( int64_t iSourceFrame ) const
 {
-	if( bApproximate )
-		*bApproximate = false;
-
 	if( IsEmpty() )
 	{
-		if( bApproximate )
-			*bApproximate = true;
 		return 0;
 	}
 
 	// iSourceFrame is probably in pos_map.  Search to figure out what position it maps to.
-	std::int64_t iClosestPosition = 0, iClosestPositionDist = std::numeric_limits<int64_t>::max();
+	int64_t iClosestPosition = 0, iClosestPositionDist = std::numeric_limits<int64_t>::max();
 	for (pos_map_t const &pm : m_pImpl->m_Queue)
 	{
 		// Loop over the queue until we know generally where iSourceFrame is
@@ -127,13 +125,13 @@ std::int64_t pos_map_queue::Search( std::int64_t iSourceFrame, bool *bApproximat
 			iSourceFrame < pm.m_iSourceFrame+pm.m_iFrames )
 		{
 			// If we are in the correct block, calculate its current position
-			std::int64_t iDiff = static_cast<std::int64_t>(iSourceFrame - pm.m_iSourceFrame);
+			int64_t iDiff = static_cast<int64_t>(iSourceFrame - pm.m_iSourceFrame);
 			iDiff = static_cast<int64_t>(( iDiff * pm.m_fSourceToDestRatio) + 0.5 ); 
 			return pm.m_iDestFrame + iDiff;
 		}
 
 		// See if the current position is close to the beginning of this block.
-		std::int64_t dist = llabs( pm.m_iSourceFrame - iSourceFrame );
+		int64_t dist = llabs( pm.m_iSourceFrame - iSourceFrame );
 		if( dist < iClosestPositionDist )
 		{
 			iClosestPositionDist = dist;
@@ -163,11 +161,9 @@ std::int64_t pos_map_queue::Search( std::int64_t iSourceFrame, bool *bApproximat
 	if( last.PeekDeltaTime() >= 1.0f )
 	{
 		last.Touch();
-		LOG->Trace("Audio frame was out of range of the data sent - possible buffer underflow? This is not always an error, however if you see it frequently there could be sound buffer problems.");
+		LOG->Trace("Audio frame (%" PRId64 ") was out of range of the data sent - possible buffer underflow? This is not always an error, however if you see it frequently there could be sound buffer problems.", iSourceFrame);
 	}
 
-	if( bApproximate )
-		*bApproximate = true;
 	return iClosestPosition;
 }
 

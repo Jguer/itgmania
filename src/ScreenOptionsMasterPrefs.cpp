@@ -941,6 +941,9 @@ static void InitializeConfOptions()
 			c.AddOption( ssprintf("%+i ms", i) );
 		ADD( c );
 	}
+	ADD( ConfOption( "DefaultSyncOffset",			MovePref<SyncOffset>,		"NULL","|ITG" ) );
+	g_ConfOptions.back().m_iEffects = OPT_RELOAD_SONGS;
+
 	ADD( ConfOption( "EnableAttackSounds",		MovePref<bool>,		"No","Yes" ) );
 	ADD( ConfOption( "EnableMineHitSound",		MovePref<bool>,		"No","Yes" ) );
 	ADD( ConfOption( "RateModPreservesPitch",		MovePref<bool>,		"No","Yes") );
@@ -994,7 +997,8 @@ static const char *OptEffectNames[] = {
 	"ApplySound",
 	"ApplySong",
 	"ApplyAspectRatio",
-	"ApplyProfiles"
+	"ApplyProfiles",
+	"ReloadSongs"
 };
 XToString( OptEffect );
 StringToX( OptEffect );

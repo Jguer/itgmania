@@ -40,3 +40,10 @@
 [submodule "extern/opentelemetry-cpp"]
 	path = extern/opentelemetry-cpp
 	url = https://github.com/open-telemetry/opentelemetry-cpp.git
+[submodule "extern/libusb"]
+	path = extern/libusb
+	url = https://github.com/libusb/libusb-cmake.git
+	shallow = true
+[submodule "extern/libjpeg-turbo"]
+	path = extern/libjpeg-turbo
+	url = https://github.com/libjpeg-turbo/libjpeg-turbo.git

@@ -13,6 +13,7 @@
 #include "LightsManager.h" // for NUM_CabinetLight
 #include "ActorUtil.h"
 #include "Preference.h"
+#include "GameLoop.h"
 
 #include <cmath>
 #include <cstddef>
@@ -166,18 +167,19 @@ Actor::Actor()
 	m_size = RageVector2( 1, 1 );
 	InitState();
 	m_pParent = nullptr;
-	m_FakeParent= nullptr;
+	m_FakeParent = nullptr;
 	m_bFirstUpdate = true;
-	m_tween_uses_effect_delta= false;
+	m_tween_uses_effect_delta = false;
+	rate_scaling_enabled_ = true;
 }
 
 Actor::~Actor()
 {
 	StopTweening();
 	UnsubscribeAll();
-	for(std::size_t i= 0; i < m_WrapperStates.size(); ++i)
+	for(size_t i= 0; i < m_WrapperStates.size(); ++i)
 	{
-		SAFE_DELETE(m_WrapperStates[i]);
+		RageUtil::SafeDelete(m_WrapperStates[i]);
 	}
 	m_WrapperStates.clear();
 }
@@ -196,7 +198,7 @@ Actor::Actor( const Actor &cpy ):
 	CPY( m_pLuaInstance );
 
 	m_WrapperStates.resize(cpy.m_WrapperStates.size());
-	for(std::size_t i= 0; i < m_WrapperStates.size(); ++i)
+	for(size_t i= 0; i < m_WrapperStates.size(); ++i)
 	{
 		m_WrapperStates[i]= new ActorFrame(*dynamic_cast<ActorFrame*>(cpy.m_WrapperStates[i]));
 	}
@@ -404,7 +406,7 @@ void Actor::Draw()
 	{
 		m_FakeParent->BeginDraw();
 	}
-	std::size_t wrapper_states_used= 0;
+	size_t wrapper_states_used= 0;
 	RageColor last_diffuse;
 	RageColor last_glow;
 	bool use_last_diffuse= false;
@@ -420,7 +422,7 @@ void Actor::Draw()
 	// wrapper[3] is the outermost frame.  wrapper[2] is inside wrapper[3].
 	// wrapper[1] is inside wrapper[2].  The actor is inside wrapper[1].
 	// -Kyz
-	for(std::size_t i= m_WrapperStates.size(); i > 0 && dont_abort_draw; --i)
+	for(size_t i= m_WrapperStates.size(); i > 0 && dont_abort_draw; --i)
 	{
 		Actor* state= m_WrapperStates[i-1];
 		if(!state->m_bVisible || state->m_fHibernateSecondsLeft > 0 ||
@@ -469,7 +471,7 @@ void Actor::Draw()
 		}
 		this->PostDraw();
 	}
-	for(std::size_t i= 0; i < wrapper_states_used; ++i)
+	for(size_t i= 0; i < wrapper_states_used; ++i)
 	{
 		Actor* state= m_WrapperStates[i];
 		if(abort_with_end_draw)
@@ -544,7 +546,7 @@ void Actor::PreDraw() // calculate actor properties
 			ssprintf("PercentThroughEffect: %f", fPercentThroughEffect) );
 
 		bool bBlinkOn = fPercentThroughEffect > 0.5f;
-		float fPercentBetweenColors = RageFastSin( (fPercentThroughEffect + 0.25f) * 2 * PI ) / 2 + 0.5f;
+		float fPercentBetweenColors = std::sin( (fPercentThroughEffect + 0.25f) * 2 * PI ) / 2 + 0.5f;
 		ASSERT_M( fPercentBetweenColors >= 0 && fPercentBetweenColors <= 1,
 			ssprintf("PercentBetweenColors: %f, PercentThroughEffect: %f", fPercentBetweenColors, fPercentThroughEffect) );
 		float fOriginalAlpha = m_current_with_effects.diffuse[0].a;
@@ -590,15 +592,15 @@ void Actor::PreDraw() // calculate actor properties
 			break;
 		case rainbow:
 			m_current_with_effects.diffuse[0] = RageColor(
-				RageFastCos( fPercentBetweenColors*2*PI ) * 0.5f + 0.5f,
-				RageFastCos( fPercentBetweenColors*2*PI + PI * 2.0f / 3.0f ) * 0.5f + 0.5f,
-				RageFastCos( fPercentBetweenColors*2*PI + PI * 4.0f / 3.0f) * 0.5f + 0.5f,
+				std::cos( fPercentBetweenColors*2*PI ) * 0.5f + 0.5f,
+				std::cos( fPercentBetweenColors*2*PI + PI * 2.0f / 3.0f ) * 0.5f + 0.5f,
+				std::cos( fPercentBetweenColors*2*PI + PI * 4.0f / 3.0f) * 0.5f + 0.5f,
 				fOriginalAlpha );
 			for( int i=1; i<NUM_DIFFUSE_COLORS; i++ )
 				m_current_with_effects.diffuse[i] = m_current_with_effects.diffuse[0];
 			break;
 		case wag:
-			m_current_with_effects.rotation += m_vEffectMagnitude * RageFastSin( fPercentThroughEffect * 2.0f * PI );
+			m_current_with_effects.rotation += m_vEffectMagnitude * std::sin( fPercentThroughEffect * 2.0f * PI );
 			break;
 		case spin:
 			// nothing needs to be here
@@ -610,13 +612,13 @@ void Actor::PreDraw() // calculate actor properties
 			break;
 		case bounce:
 			{
-				float fPercentOffset = RageFastSin( fPercentThroughEffect*PI );
+				float fPercentOffset = std::sin( fPercentThroughEffect*PI );
 				m_current_with_effects.pos += m_vEffectMagnitude * fPercentOffset;
 			}
 			break;
 		case bob:
 			{
-				float fPercentOffset = RageFastSin( fPercentThroughEffect*PI*2 );
+				float fPercentOffset = std::sin( fPercentThroughEffect*PI*2 );
 				m_current_with_effects.pos += m_vEffectMagnitude * fPercentOffset;
 			}
 			break;
@@ -624,7 +626,7 @@ void Actor::PreDraw() // calculate actor properties
 			{
 				float fMinZoom = m_vEffectMagnitude[0];
 				float fMaxZoom = m_vEffectMagnitude[1];
-				float fPercentOffset = RageFastSin( fPercentThroughEffect*PI );
+				float fPercentOffset = std::sin( fPercentThroughEffect*PI );
 				float fZoom = SCALE( fPercentOffset, 0.f, 1.f, fMinZoom, fMaxZoom );
 				m_current_with_effects.scale *= fZoom;
 
@@ -872,6 +874,15 @@ bool Actor::IsFirstUpdate() const
 void Actor::Update( float fDeltaTime )
 {
 //	LOG->Trace( "Actor::Update( %f )", fDeltaTime );
+
+	float rate = GameLoop::GetUpdateRate();
+	if (rate != 1 && !rate_scaling_enabled_) {
+		// Prevent divide by 0 when tab + tilde are both pressed.
+		if (rate != 0) {
+			fDeltaTime *= (1 / rate);
+		}
+	}
+
 	ASSERT_M( fDeltaTime >= 0, ssprintf("DeltaTime: %f",fDeltaTime) );
 
 	if( m_fHibernateSecondsLeft > 0 )
@@ -886,7 +897,7 @@ void Actor::Update( float fDeltaTime )
 		fDeltaTime = -m_fHibernateSecondsLeft;
 		m_fHibernateSecondsLeft = 0;
 	}
-	for(std::size_t i= 0; i < m_WrapperStates.size(); ++i)
+	for(size_t i= 0; i < m_WrapperStates.size(); ++i)
 	{
 		m_WrapperStates[i]->Update(fDeltaTime);
 	}
@@ -919,7 +930,7 @@ void Actor::UpdateInternal(float delta_time)
 		}
 		break;
 	case CLOCK_TIMER_GLOBAL:
-		generic_global_timer_update(RageTimer::GetUsecsSinceStart(), m_fEffectDelta, m_fSecsIntoEffect);
+		generic_global_timer_update(RageTimer::GetTimeSinceStartMicroseconds(), m_fEffectDelta, m_fSecsIntoEffect);
 		break;
 	case CLOCK_BGM_BEAT:
 		generic_global_timer_update(g_fCurrentBGMBeat, m_fEffectDelta, m_fSecsIntoEffect);
@@ -984,14 +995,14 @@ void Actor::AddWrapperState()
 	m_WrapperStates.push_back(wrapper);
 }
 
-void Actor::RemoveWrapperState(std::size_t i)
+void Actor::RemoveWrapperState(size_t i)
 {
 	ASSERT(i < m_WrapperStates.size());
-	SAFE_DELETE(m_WrapperStates[i]);
+	RageUtil::SafeDelete(m_WrapperStates[i]);
 	m_WrapperStates.erase(m_WrapperStates.begin()+i);
 }
 
-Actor* Actor::GetWrapperState(std::size_t i)
+Actor* Actor::GetWrapperState(size_t i)
 {
 	ASSERT(i < m_WrapperStates.size());
 	return m_WrapperStates[i];
@@ -1078,13 +1089,14 @@ void Actor::ScaleTo( const RectF &rect, StretchType st )
 	float fNewZoomY = std::abs(rect_height / m_size.y);
 
 	float fNewZoom = 0.f;
-	switch( st )
+
+	switch (st)
 	{
-	case cover:
-		fNewZoom = fNewZoomX>fNewZoomY ? fNewZoomX : fNewZoomY;	// use larger zoom
+	case StretchType::kCover:
+		fNewZoom = fNewZoomX > fNewZoomY ? fNewZoomX : fNewZoomY; // use larger zoom
 		break;
-	case fit_inside:
-		fNewZoom = fNewZoomX>fNewZoomY ? fNewZoomY : fNewZoomX; // use smaller zoom
+	case StretchType::kFitInside:
+		fNewZoom = fNewZoomX > fNewZoomY ? fNewZoomY : fNewZoomX; // use smaller zoom
 		break;
 	}
 
@@ -1963,11 +1975,11 @@ public:
 		p->GetWrapperState(p->GetNumWrapperStates()-1)->PushSelf(L);
 		return 1;
 	}
-	static std::size_t get_state_index(T* p, lua_State* L, int stack_index)
+	static size_t get_state_index(T* p, lua_State* L, int stack_index)
 	{
 		// Lua is one indexed.
 		int i= IArg(stack_index)-1;
-		const std::size_t si= static_cast<std::size_t>(i);
+		const size_t si= static_cast<size_t>(i);
 		if(i < 0 || si >= p->GetNumWrapperStates())
 		{
 			luaL_error(L, "%d is not a valid wrapper state index.", i+1);
@@ -1976,7 +1988,7 @@ public:
 	}
 	static int RemoveWrapperState(T* p, lua_State* L)
 	{
-		std::size_t si= get_state_index(p, L, 1);
+		size_t si= get_state_index(p, L, 1);
 		p->RemoveWrapperState(si);
 		COMMON_RETURN_SELF;
 	}
@@ -1987,7 +1999,7 @@ public:
 	}
 	static int GetWrapperState(T* p, lua_State* L)
 	{
-		std::size_t si= get_state_index(p, L, 1);
+		size_t si= get_state_index(p, L, 1);
 		p->GetWrapperState(si)->PushSelf(L);
 		return 1;
 	}
@@ -1999,10 +2011,13 @@ public:
 		COMMON_RETURN_SELF;
 	}
 
+	static int SetRateScalingEnabled( T* p, lua_State *L )	{ p->SetRateScalingEnabled(BArg(1)); COMMON_RETURN_SELF; }
+	static int GetRateScalingEnabled( T* p, lua_State *L )		{ lua_pushboolean( L, p->GetRateScalingEnabled() ); return 1; }
+
 	LunaActor()
 	{
-  		ADD_METHOD( name );
-  		ADD_METHOD( sleep );
+		ADD_METHOD( name );
+		ADD_METHOD( sleep );
 		ADD_METHOD( linear );
 		ADD_METHOD( accelerate );
 		ADD_METHOD( decelerate );
@@ -2170,6 +2185,9 @@ public:
 		ADD_METHOD( RemoveWrapperState );
 		ADD_METHOD( GetNumWrapperStates );
 		ADD_METHOD( GetWrapperState );
+
+		ADD_METHOD( SetRateScalingEnabled );
+		ADD_METHOD( GetRateScalingEnabled );
 
 		ADD_METHOD( Draw );
 	}

@@ -101,7 +101,7 @@ void StatsManager::GetFinalEvalStageStats( StageStats& statsOut ) const
 {
 	statsOut.Init();
 	std::vector<StageStats> vssToCount;
-	for(std::size_t i= 0; i < m_vPlayedStageStats.size(); ++i)
+	for(size_t i= 0; i < m_vPlayedStageStats.size(); ++i)
 	{
 		vssToCount.push_back(m_vPlayedStageStats[i]);
 	}
@@ -131,7 +131,7 @@ void AddPlayerStatsToProfile( Profile *pProfile, const StageStats &ss, PlayerNum
 		pProfile->m_iNumSongsPlayedByStyle[sID] ++;
 		pProfile->m_iNumSongsPlayedByDifficulty[pSteps->GetDifficulty()] ++;
 
-		int iMeter = clamp( pSteps->GetMeter(), 0, MAX_METER );
+		int iMeter = std::clamp( pSteps->GetMeter(), 0, MAX_METER );
 		pProfile->m_iNumSongsPlayedByMeter[iMeter] ++;
 	}
 

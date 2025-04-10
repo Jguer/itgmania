@@ -120,7 +120,7 @@ static void TestTLS()
 #endif
 
 #if 1
-/* If librt is available, use CLOCK_MONOTONIC to implement GetMicrosecondsSinceStart,
+/* If librt is available, use CLOCK_MONOTONIC to implement GetSystemTimeInMicroseconds,
  * if supported, so changes to the system clock don't cause problems. */
 namespace
 {
@@ -149,25 +149,25 @@ clockid_t ArchHooks_Unix::GetClock()
 	return g_Clock;
 }
 
-std::int64_t ArchHooks::GetMicrosecondsSinceStart( bool bAccurate )
+int64_t ArchHooks::GetSystemTimeInMicroseconds()
 {
 	OpenGetTime();
 
 	timespec ts;
 	clock_gettime( g_Clock, &ts );
 
-	std::int64_t iRet = std::int64_t(ts.tv_sec) * 1000000 + std::int64_t(ts.tv_nsec)/1000;
+	int64_t iRet = int64_t(ts.tv_sec) * 1000000 + int64_t(ts.tv_nsec)/1000;
 	if( g_Clock != CLOCK_MONOTONIC )
 		iRet = ArchHooks::FixupTimeIfBackwards( iRet );
 	return iRet;
 }
 #else
-std::int64_t ArchHooks::GetMicrosecondsSinceStart( bool bAccurate )
+int64_t ArchHooks::GetSystemTimeInMicroseconds()
 {
 	struct timeval tv;
 	gettimeofday( &tv, nullptr );
 
-	std::int64_t iRet = std::int64_t(tv.tv_sec) * 1000000 + std::int64_t(tv.tv_usec);
+	int64_t iRet = int64_t(tv.tv_sec) * 1000000 + int64_t(tv.tv_usec);
 	ret = FixupTimeIfBackwards( ret );
 	return iRet;
 }
@@ -224,31 +224,6 @@ void ArchHooks_Unix::Init()
 #if defined(HAVE_TLS) && !defined(BSD)
 	TestTLS();
 #endif
-}
-
-bool ArchHooks_Unix::GoToURL( RString sUrl )
-{
-	int status;
-	pid_t p = fork();
-	if ( p == -1 )
-	{
-		// Call to fork failed
-		return false;
-	}
-	else if ( p == 0 )
-	{
-		// Child
-		const char * const argv[] = { "xdg-open", sUrl.c_str(), nullptr };
-		execv( "/usr/bin/xdg-open", const_cast<char * const *>( argv ));
-		// If we reach here, the call to execvp failed
-		exit( 1 );
-	}
-	else
-	{
-		// Parent
-		waitpid( p, &status, 0 );
-		return WEXITSTATUS( status ) == 0;
-	}
 }
 
 #ifndef _CS_GNU_LIBC_VERSION

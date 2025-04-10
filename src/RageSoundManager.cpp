@@ -57,17 +57,6 @@ RageSoundManager::~RageSoundManager()
 	m_mapPreloadedSounds.clear();
 }
 
-
-void RageSoundManager::low_sample_count_workaround()
-{
-	m_pDriver->low_sample_count_workaround();
-}
-
-void RageSoundManager::fix_bogus_sound_driver_pref(RString const& valid_setting)
-{
-	g_sSoundDrivers.Set(valid_setting);
-}
-
 /*
  * Previously, we went to some lengths to shut down sounds before exiting threads.
  * The only other thread that actually starts sounds is SOUND.  Doing this was ugly;
@@ -77,7 +66,7 @@ void RageSoundManager::fix_bogus_sound_driver_pref(RString const& valid_setting)
  */
 void RageSoundManager::Shutdown()
 {
-	SAFE_DELETE( m_pDriver );
+	RageUtil::SafeDelete( m_pDriver );
 }
 
 void RageSoundManager::StartMixing( RageSoundBase *pSound )
@@ -100,7 +89,7 @@ bool RageSoundManager::Pause( RageSoundBase *pSound, bool bPause )
 		return m_pDriver->PauseMixing( pSound, bPause );
 }
 
-std::int64_t RageSoundManager::GetPosition( RageTimer *pTimer ) const
+int64_t RageSoundManager::GetPosition( RageTimer *pTimer ) const
 {
 	if( m_pDriver == nullptr )
 		return 0;

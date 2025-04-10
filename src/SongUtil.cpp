@@ -338,7 +338,7 @@ void SongUtil::AdjustDuplicateSteps( Song *pSong )
  */
 static RString RemoveInitialWhitespace( RString s )
 {
-	std::size_t i = s.find_first_not_of(" \t\r\n");
+	size_t i = s.find_first_not_of(" \t\r\n");
 	if( i != s.npos )
 		s.erase( 0, i );
 	return s;
@@ -593,23 +593,69 @@ void SongUtil::SortSongPointerArrayByGenre( std::vector<Song*> &vpSongsInOut )
 	stable_sort( vpSongsInOut.begin(), vpSongsInOut.end(), CompareSongPointersByGenre );
 }
 
+void SongUtil::SortSongPointerArrayByGroup( std::vector<Song*> &vpSongsInOut )
+{
+	stable_sort( vpSongsInOut.begin(), vpSongsInOut.end(), CompareSongPointersByGroup );
+}
+
 int SongUtil::CompareSongPointersByGroup(const Song *pSong1, const Song *pSong2)
 {
-	return pSong1->m_sGroupName < pSong2->m_sGroupName;
+	RString s1 = "";
+	RString s2 = "";
+
+	if( SONGMAN->GetGroup(pSong1) != nullptr )
+		s1 = SONGMAN->GetGroup(pSong1)->GetSortTitle();
+	else
+		LOG->Warn("SongUtil::CompareSongPointersByGroup: %s has no group", pSong1->GetSongDir().c_str());
+
+	if( SONGMAN->GetGroup(pSong2) != nullptr )
+		s2 = SONGMAN->GetGroup(pSong2)->GetSortTitle();
+	else
+		LOG->Warn("SongUtil::CompareSongPointersByGroup: %s has no group", pSong2->GetSongDir().c_str());
+	
+	// Sort Titles are the same, fall back on group folder name
+	if( s1 == s2 )
+	{
+		return pSong1->m_sGroupName < pSong2->m_sGroupName;
+	}
+
+	s1 = SongUtil::MakeSortString(s1);
+	s2 = SongUtil::MakeSortString(s2);
+
+	int ret = strcmp( s1, s2 );
+	return ret < 0;
 }
 
 static int CompareSongPointersByGroupAndTitle( const Song *pSong1, const Song *pSong2 )
 {
-	const RString &sGroup1 = pSong1->m_sGroupName;
-	const RString &sGroup2 = pSong2->m_sGroupName;
+	RString s1 = "";
+	RString s2 = "";
 
-	if( sGroup1 < sGroup2 )
-		return true;
-	if( sGroup1 > sGroup2 )
-		return false;
+	if( SONGMAN->GetGroup(pSong1) != nullptr )
+		s1 = SONGMAN->GetGroup(pSong1)->GetSortTitle();
+	else
+		LOG->Warn("SongUtil::CompareSongPointersByGroup: %s has no group", pSong1->GetSongDir().c_str());
 
-	/* Same group; compare by name. */
-	return CompareSongPointersByTitle( pSong1, pSong2 );
+	if( SONGMAN->GetGroup(pSong2) != nullptr )
+		s2 = SONGMAN->GetGroup(pSong2)->GetSortTitle();
+	else
+		LOG->Warn("SongUtil::CompareSongPointersByGroup: %s has no group", pSong2->GetSongDir().c_str());
+	
+	// Sort Titles are the same, fall back on group folder name
+	if( s1 == s2 )
+	{
+		/* Same group; compare by name. */
+		if( pSong1->m_sGroupName == pSong2->m_sGroupName )
+			return CompareSongPointersByTitle( pSong1, pSong2 );
+		else
+			return pSong1->m_sGroupName < pSong2->m_sGroupName;
+	}
+
+	s1 = SongUtil::MakeSortString(s1);
+	s2 = SongUtil::MakeSortString(s2);
+
+	int ret = strcmp( s1, s2 );
+	return ret < 0;
 }
 
 void SongUtil::SortSongPointerArrayByGroupAndTitle( std::vector<Song*> &vpSongsInOut )
@@ -644,8 +690,12 @@ RString SongUtil::GetSectionNameFromSongAndSort( const Song* pSong, SortOrder so
 	case SORT_PREFERRED:
 		return SONGMAN->SongToPreferredSortSectionName( pSong );
 	case SORT_GROUP:
-		// guaranteed not empty
-		return pSong->m_sGroupName;
+		if ( SONGMAN->GetGroup(pSong) == nullptr ) {
+			LOG->Warn("SongUtil::GetSectionNameFromSongAndSort: %s has no group", pSong->GetSongDir().c_str());
+			return RString();
+		} else {
+			return SONGMAN->GetGroup(pSong)->GetGroupName();
+		}
 	case SORT_TITLE:
 	case SORT_ARTIST:
 		{
@@ -700,8 +750,12 @@ RString SongUtil::GetSectionNameFromSongAndSort( const Song* pSong, SortOrder so
 				return RString();
 		}
 	case SORT_POPULARITY:
+	case SORT_POPULARITY_P1:
+	case SORT_POPULARITY_P2:
 	case SORT_RECENT:
-		return RString();
+	case SORT_RECENT_P1:
+	case SORT_RECENT_P2:
+		return THEME->GetString("MusicWheel", ssprintf("%s%s", SortOrderToString(so).c_str(), "Text"));
 	case SORT_TOP_GRADES_P1:
 			{
 			int iCounts[NUM_Grade];
@@ -828,6 +882,19 @@ void SongUtil::SortByMostRecentlyPlayedForMachine( std::vector<Song*> &vpSongsIn
 		g_mapSongSortVal[s] = val;
 	}
 
+	stable_sort( vpSongsInOut.begin(), vpSongsInOut.end(), CompareSongPointersBySortValueDescending );
+	g_mapSongSortVal.clear();
+}
+
+void SongUtil::SortByMostRecentlyPlayedForProfile( std::vector<Song*> &vpSongsInOut, PlayerNumber pn )
+{
+	Profile *pProfile = PROFILEMAN->GetProfile(pn);
+	for (Song const *s : vpSongsInOut)
+	{
+		int iNumTimesPlayed = pProfile->GetSongNumTimesPlayed( s );
+		RString val = iNumTimesPlayed ? pProfile->GetSongLastPlayedDateTime(s).GetString() : RString("0");
+		g_mapSongSortVal[s] = val;
+	}
 	stable_sort( vpSongsInOut.begin(), vpSongsInOut.end(), CompareSongPointersBySortValueDescending );
 	g_mapSongSortVal.clear();
 }

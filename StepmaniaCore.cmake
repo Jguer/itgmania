@@ -260,7 +260,7 @@ elseif(MACOSX)
       "Neither NASM nor YASM were found. Please install at least one of them."
     )
   endif()
-elseif(LINUX)
+elseif(LINUX OR BSD)
   if(WITH_GTK3)
     find_package("GTK3" 2.0)
     if(${GTK3_FOUND})
@@ -344,12 +344,12 @@ elseif(LINUX)
 
   set(OpenGL_GL_PREFERENCE GLVND)
   find_package(OpenGL REQUIRED)
-
-  find_package(Libusb)
-  if(NOT LIBUSB_FOUND)
-    message(FATAL_ERROR "libusb was not found.")
+  if (NOT OPENGL_GLU_FOUND)  # it's an optional component of OpenGL, but we use it for glew build
+    message(FATAL_ERROR "libglu was not found")
   endif()
-endif(WIN32) # LINUX, APPLE
+
+  find_package(udev REQUIRED)
+endif(WIN32) # LINUX OR BSD, APPLE
 
 configure_file("${SM_SRC_DIR}/config.in.hpp"
                "${SM_GENERATED_SRC_DIR}/config.hpp")

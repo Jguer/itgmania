@@ -6,6 +6,7 @@
 #include "IniFile.h"
 #include "GameManager.h"
 #include "GameState.h"
+#include "Group.h"
 #include "RageLog.h"
 #include "Song.h"
 #include "SongManager.h"
@@ -86,7 +87,7 @@ void Profile::ClearSongs()
 		return;
 	}
 	Song* gamestate_curr_song= GAMESTATE->m_pCurSong;
-	for(std::size_t i= 0; i < m_songs.size(); ++i)
+	for(size_t i= 0; i < m_songs.size(); ++i)
 	{
 		Song* curr_song= m_songs[i];
 		if(curr_song == gamestate_curr_song)
@@ -96,6 +97,11 @@ void Profile::ClearSongs()
 		delete curr_song;
 	}
 	m_songs.clear();
+	if (m_group != nullptr)
+	{
+		RageUtil::SafeDelete( m_group);
+
+	}
 }
 
 int Profile::HighScoresForASong::GetNumTimesPlayed() const
@@ -925,10 +931,10 @@ void Profile::MergeScoresFromOtherProfile(Profile* other, bool skip_totals,
 	{
 		// The old screenshot count is stored so we know where to start in the
 		// list when copying the screenshot images.
-		std::size_t old_count= m_vScreenshots.size();
+		size_t old_count= m_vScreenshots.size();
 		m_vScreenshots.insert(m_vScreenshots.end(),
 			other->m_vScreenshots.begin(), other->m_vScreenshots.end());
-		for(std::size_t sid= old_count; sid < m_vScreenshots.size(); ++sid)
+		for(size_t sid= old_count; sid < m_vScreenshots.size(); ++sid)
 		{
 			RString old_path= from_dir + "Screenshots/" + m_vScreenshots[sid].sFileName;
 			RString new_path= to_dir + "Screenshots/" + m_vScreenshots[sid].sFileName;
@@ -1181,25 +1187,30 @@ ProfileLoadResult Profile::LoadAllFromDir( RString sDir, bool bRequireSignature 
 // entire song list to remove custom songs when unloading the profile is
 // wasteful. -Kyz
 
-void Profile::LoadSongsFromDir(RString const& dir, ProfileSlot prof_slot)
+void Profile::LoadSongsFromDir(RString const& dir, ProfileSlot prof_slot, bool isMemoryCard)
 {
 	if(!PREFSMAN->m_custom_songs_enable)
 	{
 		return;
 	}
 	RString songs_folder= dir + "Songs";
-	if(FILEMAN->DoesFileExist(songs_folder))
+	if(FILEMAN->DoesFileExist(songs_folder) && isMemoryCard)
 	{
 		LOG->Trace("Found songs folder in profile.");
 		std::vector<RString> song_folders;
 		RageTimer song_load_start_time;
 		song_load_start_time.Touch();
 		FILEMAN->GetDirListing(songs_folder + "/*", song_folders, true, true);
+
 		StripCvsAndSvn(song_folders);
 		StripMacResourceForks(song_folders);
+
+		Group* group = new Group(songs_folder, GetDisplayNameOrHighScoreName(), true);
+		m_group = group;
+
 		LOG->Trace("Found %i songs in profile.", int(song_folders.size()));
 		// Only songs that are successfully loaded count towards the limit. -Kyz
-		for(std::size_t song_index= 0; song_index < song_folders.size()
+		for(size_t song_index= 0; song_index < song_folders.size()
 					&& m_songs.size() < PREFSMAN->m_custom_songs_max_count;
 				++song_index)
 		{
@@ -1223,6 +1234,11 @@ void Profile::LoadSongsFromDir(RString const& dir, ProfileSlot prof_slot)
 		}
 		float load_time= song_load_start_time.Ago();
 		LOG->Trace("Successfully loaded %zu songs in %.6f from profile.", m_songs.size(), load_time);
+		
+		if (m_songs.empty()) {
+			delete m_group;
+			m_group = nullptr;
+		} 
 	}
 	else
 	{
@@ -1258,7 +1274,7 @@ ProfileLoadResult Profile::LoadStatsFromDir(RString dir, bool require_signature)
 	if(compressed)
 	{
 		RString sError;
-		std::uint32_t iCRC32;
+		uint32_t iCRC32;
 		RageFileObjInflate *pInflate = GunzipFile(pFile.release(), sError, &iCRC32);
 		if(pInflate == nullptr)
 		{
@@ -2787,7 +2803,7 @@ public:
 	{
 		lua_createtable(L, p->m_songs.size(), 0);
 		int song_tab= lua_gettop(L);
-		for(std::size_t i= 0; i < p->m_songs.size(); ++i)
+		for(size_t i= 0; i < p->m_songs.size(); ++i)
 		{
 			p->m_songs[i]->PushSelf(L);
 			lua_rawseti(L, song_tab, i+1);

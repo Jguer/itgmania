@@ -449,6 +449,10 @@ void SMLoader::ParseBPMs( std::vector<std::pair<float, float>> &out, const RStri
 	for( unsigned b=0; b<arrayBPMChangeExpressions.size(); b++ )
 	{
 		std::vector<RString> arrayBPMChangeValues;
+		Trim(arrayBPMChangeExpressions[b]);
+		if (arrayBPMChangeExpressions[b].empty()) {
+			continue;
+		}
 		split( arrayBPMChangeExpressions[b], "=", arrayBPMChangeValues );
 		if( arrayBPMChangeValues.size() != 2 )
 		{
@@ -479,6 +483,10 @@ void SMLoader::ParseStops( std::vector<std::pair<float, float>> &out, const RStr
 	for( unsigned f=0; f<arrayFreezeExpressions.size(); f++ )
 	{
 		std::vector<RString> arrayFreezeValues;
+		Trim(arrayFreezeExpressions[f]);
+		if (arrayFreezeExpressions[f].empty()) {
+			continue;
+		}
 		split( arrayFreezeExpressions[f], "=", arrayFreezeValues );
 		if( arrayFreezeValues.size() != 2 )
 		{
@@ -745,6 +753,10 @@ void SMLoader::ProcessDelays( TimingData &out, const RString line, const int row
 	for( unsigned f=0; f<arrayDelayExpressions.size(); f++ )
 	{
 		std::vector<RString> arrayDelayValues;
+		Trim(arrayDelayExpressions[f]);
+		if (arrayDelayExpressions[f].empty()) {
+			continue;
+		}
 		split( arrayDelayExpressions[f], "=", arrayDelayValues );
 		if( arrayDelayValues.size() != 2 )
 		{
@@ -845,6 +857,10 @@ void SMLoader::ProcessTickcounts( TimingData &out, const RString line, const int
 	for( unsigned f=0; f<arrayTickcountExpressions.size(); f++ )
 	{
 		std::vector<RString> arrayTickcountValues;
+		Trim(arrayTickcountExpressions[f]);
+		if (arrayTickcountExpressions[f].empty()) {
+			continue;
+		}
 		split( arrayTickcountExpressions[f], "=", arrayTickcountValues );
 		if( arrayTickcountValues.size() != 2 )
 		{
@@ -856,7 +872,7 @@ void SMLoader::ProcessTickcounts( TimingData &out, const RString line, const int
 		}
 
 		const float fTickcountBeat = RowToBeat( arrayTickcountValues[0], rowsPerBeat );
-		int iTicks = clamp(atoi( arrayTickcountValues[1] ), 0, ROWS_PER_BEAT);
+		int iTicks = std::clamp(atoi( arrayTickcountValues[1] ), 0, ROWS_PER_BEAT);
 
 		out.AddSegment( TickcountSegment(BeatToNoteRow(fTickcountBeat), iTicks) );
 	}
@@ -930,6 +946,10 @@ void SMLoader::ProcessFakes( TimingData &out, const RString line, const int rows
 	for( unsigned b=0; b<arrayFakeExpressions.size(); b++ )
 	{
 		std::vector<RString> arrayFakeValues;
+		Trim(arrayFakeExpressions[b]);
+		if (arrayFakeExpressions[b].empty()) {
+			continue;
+		}
 		split( arrayFakeExpressions[b], "=", arrayFakeValues );
 		if( arrayFakeValues.size() != 2 )
 		{
@@ -1281,7 +1301,7 @@ bool SMLoader::LoadEditFromMsd( const MsdFile &msd, const RString &sEditFilePath
 			if( pSong->IsEditAlreadyLoaded(pNewNotes) )
 			{
 				LOG->UserLog( "Edit file", sEditFilePath, "is a duplicate of another edit that was already loaded." );
-				SAFE_DELETE( pNewNotes );
+				RageUtil::SafeDelete( pNewNotes );
 				return false;
 			}
 
@@ -1406,9 +1426,9 @@ void SMLoader::ParseBGChangesString(const RString& _sChanges, std::vector<std::v
 
 	// strip newlines (basically operates as both split and join at the same time)
 	RString sChanges;
-	std::size_t start = 0;
+	size_t start = 0;
 	do {
-		std::size_t pos = _sChanges.find_first_of("\r\n", start);
+		size_t pos = _sChanges.find_first_of("\r\n", start);
 		if (RString::npos == pos)
 			pos = _sChanges.size();
 
@@ -1447,7 +1467,7 @@ void SMLoader::ParseBGChangesString(const RString& _sChanges, std::vector<std::v
 				// the string itself matches
 				if (f.EqualsNoCase(sChanges.substr(start, f.size()).c_str()))
 				{
-					std::size_t nextpos = start + f.size();
+					size_t nextpos = start + f.size();
 
 					// is this name followed by end-of-string, equals, or comma?
 					if ((nextpos == sChanges.size()) || (sChanges[nextpos] == '=') || (sChanges[nextpos] == ','))
@@ -1485,8 +1505,8 @@ void SMLoader::ParseBGChangesString(const RString& _sChanges, std::vector<std::v
 			if(0 == pnum) vvsAddTo.push_back(std::vector<RString>()); // first value of this set. create our vector
 
 			{
-				std::size_t eqpos = sChanges.find('=', start);
-				std::size_t compos = sChanges.find(',', start);
+				size_t eqpos = sChanges.find('=', start);
+				size_t compos = sChanges.find(',', start);
 
 				if ((eqpos == RString::npos) && (compos == RString::npos))
 				{
