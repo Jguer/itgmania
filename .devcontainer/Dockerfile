@@ -13,7 +13,6 @@ RUN dnf -y update && dnf -y install --skip-unavailable \
     wget \
     ninja-build \
     pkgconfig \
-    # System libraries required by ITGmania
     alsa-lib-devel \
     pulseaudio-libs-devel \
     jack-audio-connection-kit-devel \
@@ -31,7 +30,6 @@ RUN dnf -y update && dnf -y install --skip-unavailable \
     gtest-devel \
     nlohmann-json-devel \
     gtk3-devel \
-    # Missing libraries from Fedora 23 list
     libpng-devel \
     libjpeg-devel \
     zlib-devel \
@@ -40,7 +38,6 @@ RUN dnf -y update && dnf -y install --skip-unavailable \
     libmad-devel \
     bzip2-devel \
     pcre-devel \
-    # Development tools
     gdb \
     valgrind \
     perf \
@@ -49,13 +46,11 @@ RUN dnf -y update && dnf -y install --skip-unavailable \
     nano \
     diffutils \
     patch \
-    # Extra utilities
     sudo \
     which \
     findutils \
     procps-ng \
     net-tools \
-    # Install ffmpeg dependencies
     yasm \
     SDL2-devel \
     && dnf clean all
