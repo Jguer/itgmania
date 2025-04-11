@@ -31,7 +31,7 @@ Once inside the container, you can build ITGmania using the standard CMake comma
 
 ```bash
 # Configure the build
-cmake -S . -B Build -DCMAKE_BUILD_TYPE=Debug
+cmake -S . -B Build -DCMAKE_BUILD_TYPE=Debug -DWITH_MINIMAID=OFF
 
 # Build the project
 cmake --build Build -j $(nproc)
