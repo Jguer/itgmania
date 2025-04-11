@@ -22,7 +22,7 @@ public:
     opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::trace::Tracer> GetTracer();
     // get logger
     opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::logs::Logger> GetLogger();
-private:
+
     // store observable gauge, counter, and histogram
     opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Gauge<int64_t>> m_hitGauge;
     opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Histogram<uint64_t>> m_hitHistogram;

@@ -11,6 +11,7 @@ set(WITH_ETW OFF CACHE BOOL "Whether to build with ETW tracer" FORCE)
 set(BUILD_TESTING OFF CACHE BOOL "Whether to build tests" FORCE)
 set(BUILD_EXAMPLES OFF CACHE BOOL "Whether to build examples" FORCE)
 set(WITH_BENCHMARK OFF CACHE BOOL "Whether to build benchmark program" FORCE)
+set(WITH_ABSEIL ON CACHE BOOL "Whether to build with abseil" FORCE)
 
 # Use the system-provided JSON library
 set(NLOHMANN_JSON_INCLUDE_DIRS "/usr/include/nlohmann" CACHE PATH "Path to nlohmann/json.hpp" FORCE)
