@@ -453,8 +453,12 @@ list(APPEND SMDATA_LINK_LIB "opentelemetry_trace"
     "opentelemetry_exporter_otlp_http"
     "opentelemetry_exporter_otlp_http_metric"
     "opentelemetry_exporter_otlp_http_log"
+    "opentelemetry_exporter_otlp_grpc"
+    "opentelemetry_exporter_otlp_grpc_log"
     "opentelemetry_otlp_recordable"
     "opentelemetry_resources"
+    "grpc++"
+    "protobuf"
     )
 
 list(APPEND SM_INCLUDE_DIRS "${OPENTELEMETRY_CPP_INCLUDE_DIRS}")

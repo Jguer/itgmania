@@ -30,13 +30,15 @@
 #include "opentelemetry/logs/provider.h"
 #include "opentelemetry/sdk/logs/logger_provider.h"
 #include "opentelemetry/sdk/logs/logger_provider_factory.h"
-#include "opentelemetry/exporters/otlp/otlp_http_log_record_exporter_factory.h"
-#include "opentelemetry/exporters/otlp/otlp_http_log_record_exporter_options.h"
+#include "opentelemetry/exporters/otlp/otlp_grpc_log_record_exporter_factory.h"
+#include "opentelemetry/exporters/otlp/otlp_grpc_log_record_exporter_options.h"
 #include "opentelemetry/sdk/logs/exporter.h"
 #include "opentelemetry/sdk/logs/processor.h"
 #include "opentelemetry/sdk/logs/simple_log_record_processor_factory.h"
 #include "opentelemetry/exporters/otlp/otlp_http_exporter_factory.h"
 #include "opentelemetry/exporters/otlp/otlp_http_exporter_options.h"
+#include "opentelemetry/exporters/otlp/otlp_grpc_exporter_factory.h"
+#include "opentelemetry/exporters/otlp/otlp_grpc_exporter_options.h"
 #include "opentelemetry/sdk/trace/simple_processor_factory.h"
 #include "opentelemetry/sdk/trace/tracer_provider.h"
 #include "opentelemetry/sdk/trace/tracer_provider_factory.h"
@@ -87,11 +89,14 @@ MetricsProvider::MetricsProvider()
 	m_hitGauge = meter->CreateInt64Gauge("hitGauge", "hits over the current song", "unit");
 
 	// Initialize logger
-	otlp_exporter::OtlpHttpLogRecordExporterOptions log_exporter_options;
-	log_exporter_options.url = PREFSMAN->m_sOTLPLogsURL.Get();
-	log_exporter_options.content_type = otlp_exporter::HttpRequestContentType::kBinary;
-	log_exporter_options.console_debug = true;
-	auto log_exporter = otlp_exporter::OtlpHttpLogRecordExporterFactory::Create(log_exporter_options);
+	otlp_exporter::OtlpGrpcLogRecordExporterOptions log_exporter_options;
+	log_exporter_options.endpoint = PREFSMAN->m_sOTLPLogsURL.Get();
+	
+	// Set debug logging via the SDK's log handler if needed
+	opentelemetry::sdk::common::internal_log::GlobalLogHandler::SetLogLevel(
+		opentelemetry::sdk::common::internal_log::LogLevel::Debug);
+	
+	auto log_exporter = otlp_exporter::OtlpGrpcLogRecordExporterFactory::Create(log_exporter_options);
 	
 	// Create a processor for the logger
 	auto log_processor = logs_sdk::SimpleLogRecordProcessorFactory::Create(std::move(log_exporter));
@@ -107,12 +112,10 @@ MetricsProvider::MetricsProvider()
 	m_logger = shared_logger_provider->GetLogger(name, version);
 
 	// Initialize tracer
-	otlp_exporter::OtlpHttpExporterOptions trace_exporter_options;
-	trace_exporter_options.url = PREFSMAN->m_sOTLPTracesURL.Get();
-	trace_exporter_options.content_type = otlp_exporter::HttpRequestContentType::kBinary;
-	trace_exporter_options.console_debug = true;
-
-	auto trace_exporter = otlp_exporter::OtlpHttpExporterFactory::Create(trace_exporter_options);
+	otlp_exporter::OtlpGrpcExporterOptions trace_exporter_options;
+	trace_exporter_options.endpoint = PREFSMAN->m_sOTLPTracesURL.Get();
+	
+	auto trace_exporter = otlp_exporter::OtlpGrpcExporterFactory::Create(trace_exporter_options);
 	
 	// Create a span processor
 	auto span_processor = trace_sdk::SimpleSpanProcessorFactory::Create(std::move(trace_exporter));

@@ -311,9 +311,9 @@ PrefsManager::PrefsManager() :
 	m_bQuirksMode			( "QuirksMode",		false ),
 
 	// OTLP configuration
-	m_sOTLPMetricsURL		( "OTLPMetricsURL",	"http://localhost:4318/v1/metrics" ),
-	m_sOTLPLogsURL			( "OTLPLogsURL",	"http://localhost:4318/v1/logs" ),
-	m_sOTLPTracesURL		( "OTLPTracesURL",	"http://localhost:4318/v1/traces" ),
+	m_sOTLPMetricsURL		( "OTLPMetricsURL",	"localhost:4317" ),
+	m_sOTLPLogsURL			( "OTLPLogsURL",	"localhost:4317" ),
+	m_sOTLPTracesURL		( "OTLPTracesURL"	"localhost:4317" ),
 
 	m_custom_songs_enable("CustomSongsEnable", false),
 	m_custom_songs_max_count("CustomSongsMaxCount", 1000), // No limit. -- 2 Unlimited
