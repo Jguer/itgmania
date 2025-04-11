@@ -1,7 +1,7 @@
 set(OPENTELEMETRY_DIR "opentelemetry-cpp")
 
 # Define minimal set of components to build from opentelemetry-cpp
-set(WITH_OTLP ON CACHE BOOL "Whether to build with OTLP exporter" FORCE)
+set(WITH_OTLP OFF CACHE BOOL "Whether to build with OTLP exporter" FORCE)
 set(WITH_OTLP_HTTP ON CACHE BOOL "Whether to build with OTLP HTTP exporter" FORCE)
 set(WITH_PROMETHEUS OFF CACHE BOOL "Whether to build with Prometheus exporter" FORCE)
 set(WITH_ZIPKIN OFF CACHE BOOL "Whether to build with Zipkin exporter" FORCE)

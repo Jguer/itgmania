@@ -26,15 +26,17 @@ RUN dnf -y update && dnf -y install --skip-unavailable \
     systemd-devel \
     libusb1-devel \
     libusb-compat-0.1-devel \
-    protobuf-devel \
     gtest-devel \
     nlohmann-json-devel \
+    protobuf-compiler \
+    protobuf-devel \
     gtk3-devel \
     libpng-devel \
     libjpeg-devel \
     zlib-devel \
     libogg-devel \
     libvorbis-devel \
+    grpc-devel \
     libmad-devel \
     bzip2-devel \
     pcre-devel \
