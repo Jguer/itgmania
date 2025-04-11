@@ -25,6 +25,8 @@
 #include "opentelemetry/sdk/metrics/view/instrument_selector_factory.h"
 #include "opentelemetry/sdk/metrics/view/meter_selector_factory.h"
 #include "opentelemetry/sdk/metrics/view/view_factory.h"
+#include "opentelemetry/sdk/metrics/view/view_registry_factory.h"
+#include "opentelemetry/sdk/resource/resource.h"
 #include "opentelemetry/logs/provider.h"
 #include "opentelemetry/sdk/logs/logger_provider.h"
 #include "opentelemetry/sdk/logs/logger_provider_factory.h"
@@ -39,7 +41,7 @@
 #include "opentelemetry/sdk/trace/tracer_provider.h"
 #include "opentelemetry/sdk/trace/tracer_provider_factory.h"
 #include "opentelemetry/trace/provider.h"
-
+#include "opentelemetry/sdk/metrics/view/view_factory.h"
 MetricsProvider* METRICS = nullptr;
 
 namespace metrics_sdk      = opentelemetry::sdk::metrics;
@@ -74,7 +76,8 @@ MetricsProvider::MetricsProvider()
 	auto reader =
 		metrics_sdk::PeriodicExportingMetricReaderFactory::Create(std::move(exporter), reader_options);
 
-	auto context = metrics_sdk::MeterContextFactory::Create();
+	auto views = metrics_sdk::ViewRegistryFactory::Create();
+	auto context = metrics_sdk::MeterContextFactory::Create(std::move(views), resource);
 	context->AddMetricReader(std::move(reader));
 
 	auto u_provider = metrics_sdk::MeterProviderFactory::Create(std::move(context));
