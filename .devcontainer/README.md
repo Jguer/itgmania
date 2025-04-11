@@ -37,7 +37,7 @@ cmake -S . -B Build -DCMAKE_BUILD_TYPE=Debug
 cmake --build Build -j $(nproc)
 
 # Run ITGmania
-./Build/ITGmania
+./itgmania
 ```
 
 ## Customization
