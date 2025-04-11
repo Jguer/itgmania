@@ -307,8 +307,52 @@ void RageLog::Write( int where, const RString &sLine )
 		if (METRICS != nullptr) {
 			auto logger = METRICS->GetLogger();
 			if (logger != nullptr) {
-				// Convert string to compatible format for OpenTelemetry logging
-				opentelemetry::v2::nostd::string_view stringView(sStr.c_str());
+				// Sanitize string to ensure valid UTF-8 before passing to OpenTelemetry
+				RString sanitizedStr = sStr;
+				// Replace invalid UTF-8 sequences with '?'
+				for (unsigned int i = 0; i < sanitizedStr.size(); ) {
+					unsigned char c = sanitizedStr[i];
+					if (c < 0x80) {
+						// ASCII character, valid UTF-8
+						i++;
+					} else if ((c & 0xE0) == 0xC0) {
+						// 2-byte UTF-8 sequence
+						if (i + 1 >= sanitizedStr.size() || (sanitizedStr[i + 1] & 0xC0) != 0x80) {
+							sanitizedStr[i] = '?';
+							i++;
+						} else {
+							i += 2;
+						}
+					} else if ((c & 0xF0) == 0xE0) {
+						// 3-byte UTF-8 sequence
+						if (i + 2 >= sanitizedStr.size() || 
+							(sanitizedStr[i + 1] & 0xC0) != 0x80 || 
+							(sanitizedStr[i + 2] & 0xC0) != 0x80) {
+							sanitizedStr[i] = '?';
+							i++;
+						} else {
+							i += 3;
+						}
+					} else if ((c & 0xF8) == 0xF0) {
+						// 4-byte UTF-8 sequence
+						if (i + 3 >= sanitizedStr.size() || 
+							(sanitizedStr[i + 1] & 0xC0) != 0x80 || 
+							(sanitizedStr[i + 2] & 0xC0) != 0x80 || 
+							(sanitizedStr[i + 3] & 0xC0) != 0x80) {
+							sanitizedStr[i] = '?';
+							i++;
+						} else {
+							i += 4;
+						}
+					} else {
+						// Invalid UTF-8 byte
+						sanitizedStr[i] = '?';
+						i++;
+					}
+				}
+				
+				// Convert sanitized string to compatible format for OpenTelemetry logging
+				opentelemetry::v2::nostd::string_view stringView(sanitizedStr.c_str());
 				
 				// Determine appropriate log level based on the 'where' flags
 				if (where & WRITE_LOUD) {
