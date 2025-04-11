@@ -3,22 +3,35 @@
 #include "RageUtil.h"
 #include "PrefsManager.h"
 
+#include "opentelemetry/common/attribute_value.h"
+#include "opentelemetry/exporters/otlp/otlp_environment.h"
 #include "opentelemetry/exporters/otlp/otlp_grpc_metric_exporter_factory.h"
 #include "opentelemetry/exporters/otlp/otlp_grpc_metric_exporter_options.h"
 #include "opentelemetry/metrics/meter_provider.h"
 #include "opentelemetry/metrics/provider.h"
 #include "opentelemetry/sdk/common/global_log_handler.h"
+#include "opentelemetry/sdk/metrics/aggregation/default_aggregation.h"
+#include "opentelemetry/sdk/metrics/aggregation/histogram_aggregation.h"
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h"
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_options.h"
 #include "opentelemetry/sdk/metrics/meter.h"
+#include "opentelemetry/sdk/metrics/meter_context.h"
 #include "opentelemetry/sdk/metrics/meter_context_factory.h"
 #include "opentelemetry/sdk/metrics/meter_provider.h"
 #include "opentelemetry/sdk/metrics/meter_provider_factory.h"
+#include "opentelemetry/sdk/metrics/metric_reader.h"
+#include "opentelemetry/sdk/metrics/push_metric_exporter.h"
+#include "opentelemetry/sdk/metrics/state/filtered_ordered_attribute_map.h"
+#include "opentelemetry/sdk/metrics/view/instrument_selector_factory.h"
+#include "opentelemetry/sdk/metrics/view/meter_selector_factory.h"
+#include "opentelemetry/sdk/metrics/view/view_factory.h"
 #include "opentelemetry/logs/provider.h"
 #include "opentelemetry/sdk/logs/logger_provider.h"
 #include "opentelemetry/sdk/logs/logger_provider_factory.h"
 #include "opentelemetry/exporters/otlp/otlp_grpc_log_record_exporter_factory.h"
 #include "opentelemetry/exporters/otlp/otlp_grpc_log_record_exporter_options.h"
+#include "opentelemetry/sdk/logs/exporter.h"
+#include "opentelemetry/sdk/logs/processor.h"
 #include "opentelemetry/sdk/logs/simple_log_record_processor_factory.h"
 #include "opentelemetry/exporters/otlp/otlp_grpc_exporter_factory.h"
 #include "opentelemetry/exporters/otlp/otlp_grpc_exporter_options.h"
@@ -40,12 +53,18 @@ namespace trace_api        = opentelemetry::trace;
 
 MetricsProvider::MetricsProvider()
 { 
-	otlp_exporter::OtlpGrpcMetricExporterOptions exporter_options;
-	exporter_options.endpoint = PREFSMAN->m_sOTLPMetricsURL.Get();
-	auto exporter = otlp_exporter::OtlpGrpcMetricExporterFactory::Create(exporter_options);
 	std::string version{"1.2.0"};
 	std::string schema{"https://opentelemetry.io/schemas/1.2.0"};
 	std::string name{"itgmania"};
+	auto resource_attributes = opentelemetry::v2::sdk::resource::ResourceAttributes{
+		{"service.name", "itgmania"},
+		{"service.instance.id", "local"}
+	};
+	auto resource = opentelemetry::v2::sdk::resource::Resource::Create(resource_attributes);
+
+	otlp_exporter::OtlpGrpcMetricExporterOptions exporter_options;
+	exporter_options.endpoint = PREFSMAN->m_sOTLPMetricsURL.Get();
+	auto exporter = otlp_exporter::OtlpGrpcMetricExporterFactory::Create(exporter_options);
 
 	// Initialize and set the global MeterProvider
 	metrics_sdk::PeriodicExportingMetricReaderOptions reader_options;
@@ -83,7 +102,7 @@ MetricsProvider::MetricsProvider()
 	auto log_processor = logs_sdk::SimpleLogRecordProcessorFactory::Create(std::move(log_exporter));
 	
 	// Create a LoggerProvider with the processor
-	auto logger_provider = logs_sdk::LoggerProviderFactory::Create(std::move(log_processor));
+	auto logger_provider = logs_sdk::LoggerProviderFactory::Create(std::move(log_processor), resource);
 	
 	// Set as the global LoggerProvider
 	std::shared_ptr<logs_api::LoggerProvider> shared_logger_provider(std::move(logger_provider));
@@ -102,7 +121,7 @@ MetricsProvider::MetricsProvider()
 	auto span_processor = trace_sdk::SimpleSpanProcessorFactory::Create(std::move(trace_exporter));
 	
 	// Create a TracerProvider with the processor
-	auto tracer_provider_unique = trace_sdk::TracerProviderFactory::Create(std::move(span_processor));
+	auto tracer_provider_unique = trace_sdk::TracerProviderFactory::Create(std::move(span_processor), resource);
 	
 	// Convert to shared_ptr to set global provider
 	std::shared_ptr<trace_api::TracerProvider> tracer_provider(std::move(tracer_provider_unique));
