@@ -57,6 +57,8 @@ MetricsProvider::MetricsProvider()
 { 
 	otlp_exporter::OtlpHttpMetricExporterOptions exporter_options;
 	exporter_options.url = PREFSMAN->m_sOTLPMetricsURL.Get();
+	exporter_options.content_type = otlp_exporter::HttpRequestContentType::kBinary;
+	exporter_options.console_debug = true;
 	auto exporter = otlp_exporter::OtlpHttpMetricExporterFactory::Create(exporter_options);
 	std::string version{"1.2.0"};
 	std::string schema{"https://opentelemetry.io/schemas/1.2.0"};
@@ -87,6 +89,8 @@ MetricsProvider::MetricsProvider()
 	// Initialize logger
 	otlp_exporter::OtlpHttpLogRecordExporterOptions log_exporter_options;
 	log_exporter_options.url = PREFSMAN->m_sOTLPLogsURL.Get();
+	log_exporter_options.content_type = otlp_exporter::HttpRequestContentType::kBinary;
+	log_exporter_options.console_debug = true;
 	auto log_exporter = otlp_exporter::OtlpHttpLogRecordExporterFactory::Create(log_exporter_options);
 	
 	// Create a processor for the logger
@@ -105,6 +109,9 @@ MetricsProvider::MetricsProvider()
 	// Initialize tracer
 	otlp_exporter::OtlpHttpExporterOptions trace_exporter_options;
 	trace_exporter_options.url = PREFSMAN->m_sOTLPTracesURL.Get();
+	trace_exporter_options.content_type = otlp_exporter::HttpRequestContentType::kBinary;
+	trace_exporter_options.console_debug = true;
+
 	auto trace_exporter = otlp_exporter::OtlpHttpExporterFactory::Create(trace_exporter_options);
 	
 	// Create a span processor
