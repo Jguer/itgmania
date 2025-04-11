@@ -37,6 +37,7 @@ RUN dnf -y update && dnf -y install --skip-unavailable \
     libogg-devel \
     libvorbis-devel \
     grpc-devel \
+    zlib-ng-compat-static \
     libmad-devel \
     bzip2-devel \
     pcre-devel \
