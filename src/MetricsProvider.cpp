@@ -5,9 +5,8 @@
 
 #include "opentelemetry/common/attribute_value.h"
 #include "opentelemetry/exporters/otlp/otlp_environment.h"
-#include "opentelemetry/exporters/otlp/otlp_http.h"
-#include "opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h"
-#include "opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h"
+#include "opentelemetry/exporters/otlp/otlp_grpc_metric_exporter_factory.h"
+#include "opentelemetry/exporters/otlp/otlp_grpc_metric_exporter_options.h"
 #include "opentelemetry/metrics/meter_provider.h"
 #include "opentelemetry/metrics/provider.h"
 #include "opentelemetry/sdk/common/global_log_handler.h"
@@ -35,8 +34,6 @@
 #include "opentelemetry/sdk/logs/exporter.h"
 #include "opentelemetry/sdk/logs/processor.h"
 #include "opentelemetry/sdk/logs/simple_log_record_processor_factory.h"
-#include "opentelemetry/exporters/otlp/otlp_http_exporter_factory.h"
-#include "opentelemetry/exporters/otlp/otlp_http_exporter_options.h"
 #include "opentelemetry/exporters/otlp/otlp_grpc_exporter_factory.h"
 #include "opentelemetry/exporters/otlp/otlp_grpc_exporter_options.h"
 #include "opentelemetry/sdk/trace/simple_processor_factory.h"
@@ -57,11 +54,9 @@ namespace trace_api        = opentelemetry::trace;
 
 MetricsProvider::MetricsProvider()
 { 
-	otlp_exporter::OtlpHttpMetricExporterOptions exporter_options;
-	exporter_options.url = PREFSMAN->m_sOTLPMetricsURL.Get();
-	exporter_options.content_type = otlp_exporter::HttpRequestContentType::kBinary;
-	exporter_options.console_debug = true;
-	auto exporter = otlp_exporter::OtlpHttpMetricExporterFactory::Create(exporter_options);
+	otlp_exporter::OtlpGrpcMetricExporterOptions exporter_options;
+	exporter_options.endpoint = PREFSMAN->m_sOTLPMetricsURL.Get();
+	auto exporter = otlp_exporter::OtlpGrpcMetricExporterFactory::Create(exporter_options);
 	std::string version{"1.2.0"};
 	std::string schema{"https://opentelemetry.io/schemas/1.2.0"};
 	std::string name{"itgmania"};
