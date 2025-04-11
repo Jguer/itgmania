@@ -313,7 +313,7 @@ PrefsManager::PrefsManager() :
 	// OTLP configuration
 	m_sOTLPMetricsURL		( "OTLPMetricsURL",	"localhost:4317" ),
 	m_sOTLPLogsURL			( "OTLPLogsURL",	"localhost:4317" ),
-	m_sOTLPTracesURL		( "OTLPTracesURL"	"localhost:4317" ),
+	m_sOTLPTracesURL		( "OTLPTracesURL",	"localhost:4317" ),
 
 	m_custom_songs_enable("CustomSongsEnable", false),
 	m_custom_songs_max_count("CustomSongsMaxCount", 1000), // No limit. -- 2 Unlimited
