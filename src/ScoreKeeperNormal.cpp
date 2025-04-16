@@ -261,6 +261,20 @@ void ScoreKeeperNormal::HandleTapScoreNone()
 	// TODO: networking code
 }
 
+// Helper to add song and steps info to metric labels
+static void AddSongStepLabels(std::map<std::string, std::string>& labels, int playerNumber) {
+    Song* song = GAMESTATE->m_pCurSong;
+    Steps* steps = GAMESTATE->m_pCurSteps[playerNumber];
+    if (song) {
+        labels["song_title"] = song->GetMainTitle();
+        labels["song_artist"] = song->GetDisplayArtist();
+    }
+    if (steps) {
+        labels["difficulty"] = DifficultyToString(steps->GetDifficulty());
+        labels["meter"] = std::to_string(steps->GetMeter());
+    }
+}
+
 void ScoreKeeperNormal::AddScoreInternal( TapNoteScore score )
 {
 	if( m_UseInternalScoring )
@@ -337,6 +351,7 @@ void ScoreKeeperNormal::AddScoreInternal( TapNoteScore score )
 		std::map<std::string, std::string> labels = {
 			{"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)}
 		};
+		AddSongStepLabels(labels, m_pPlayerState->m_PlayerNumber);
 		auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
 		auto context = opentelemetry::context::Context{};
 		scoreGauge->Record(static_cast<int64_t>(iScore), labelkv, context);
@@ -444,6 +459,7 @@ void ScoreKeeperNormal::HandleTapNoteScoreInternal( TapNoteScore tns, TapNoteSco
 		{"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)},
 		{"tns", TapNoteScoreToLocalizedString(tns)},
 	};
+    AddSongStepLabels(labels, m_pPlayerState->m_PlayerNumber);
 
 	// update the miss counter
 	auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
@@ -507,6 +523,7 @@ void ScoreKeeperNormal::HandleComboInternal( int iNumHitContinueCombo, int iNumH
 	std::map<std::string, std::string> labels = {
 		{"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)}
 	};
+	AddSongStepLabels(labels, m_pPlayerState->m_PlayerNumber);
 	auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
 	auto context = opentelemetry::context::Context{};
 	comboGauge->Record(static_cast<int64_t>(m_pPlayerStageStats->m_iCurCombo), labelkv, context);
@@ -633,6 +650,20 @@ void ScoreKeeperNormal::HandleTapRowScore( const NoteData &nd, int iRow )
 	// TODO: Remove indexing with PlayerNumber
 	PlayerNumber pn = m_pPlayerState->m_PlayerNumber;
 	float offset = NoteDataWithScoring::LastTapNoteWithResult( nd, iRow ).result.fTapNoteOffset;
+
+	// Record the note hit timing offset to the histogram (in ms, relative to perfect)
+	if (METRICS) {
+		auto histogram = METRICS->GetHistogram();
+		std::map<std::string, std::string> labels = {
+			{"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)}
+		};
+		AddSongStepLabels(labels, m_pPlayerState->m_PlayerNumber);
+		auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+		auto context = opentelemetry::context::Context{};
+		uint64_t offset_ms = static_cast<uint64_t>(offset * 1000.0f);
+		histogram->Record(offset_ms, labelkv, context);
+	}
+
 	Message msg( "ScoreChanged" );
 	msg.SetParam( "PlayerNumber", m_pPlayerState->m_PlayerNumber );
 	msg.SetParam( "MultiPlayer", m_pPlayerState->m_mp );
