@@ -829,6 +829,7 @@ void Player::SendComboMessages( unsigned int iOldCombo, unsigned int iOldMissCom
 
 void Player::Update( float fDeltaTime )
 {
+	auto span = METRICS->GetTracer()->StartSpan("Player::Update");
 	const RageTimer now;
 	// Don't update if we haven't been loaded yet.
 	if( !m_bLoaded )
@@ -1195,6 +1196,7 @@ void Player::Update( float fDeltaTime )
 	}
 	// process transforms that are waiting to be applied
 	ApplyWaitingTransforms();
+	span->End();
 }
 
 // Update a group of holds with shared scoring/life. All of these holds will have the same start row.

@@ -18,6 +18,7 @@
 #include "Course.h"
 #include "NoteData.h"
 #include "RageDisplay.h"
+#include "MetricsProvider.h"
 
 #include <cfloat>
 #include <cmath>
@@ -331,6 +332,7 @@ void NoteField::InitColumnRenderers()
 
 void NoteField::Update( float fDeltaTime )
 {
+	auto span = METRICS->GetTracer()->StartSpan("NoteField::Update");
 	if( m_bFirstUpdate )
 	{
 		m_pCurDisplay->m_ReceptorArrowRow.PlayCommand( "On" );
@@ -383,6 +385,7 @@ void NoteField::Update( float fDeltaTime )
 	PlayerNumber pn = m_pPlayerState->m_PlayerNumber;
 	if( pn == GAMESTATE->GetMasterPlayerNumber() )
 		NoteDisplay::Update( fDeltaTime );
+	span->End();
 }
 
 float NoteField::GetWidth() const
