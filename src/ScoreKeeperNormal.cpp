@@ -236,20 +236,25 @@ void ScoreKeeperNormal::AddTapScore( TapNoteScore tns )
 
 void ScoreKeeperNormal::AddHoldScore( HoldNoteScore hns )
 {
+	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::AddHoldScore");
 	if( hns == HNS_Held )
 		AddScoreInternal( TNS_W1 );
 	else if ( hns == HNS_LetGo )
 		AddScoreInternal( TNS_W4 ); // required for subtractive score display to work properly.
+	span->End();
 }
 
 void ScoreKeeperNormal::AddTapRowScore( TapNoteScore score, const NoteData &nd, int iRow )
 {
+	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::AddTapRowScore");
 	AddScoreInternal( score );
+	span->End();
 }
 
 extern ThemeMetric<bool> PENALIZE_TAP_SCORE_NONE;
 void ScoreKeeperNormal::HandleTapScoreNone()
 {
+	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::HandleTapScoreNone");
 	if( PENALIZE_TAP_SCORE_NONE )
 	{
 		m_pPlayerStageStats->m_iCurCombo = 0;
@@ -259,6 +264,7 @@ void ScoreKeeperNormal::HandleTapScoreNone()
 	}
 
 	// TODO: networking code
+	span->End();
 }
 
 // Helper to add song and steps info to metric labels
@@ -277,6 +283,7 @@ static void AddSongStepLabels(std::map<std::string, std::string>& labels, int pl
 
 void ScoreKeeperNormal::AddScoreInternal( TapNoteScore score )
 {
+	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::AddScoreInternal");
 	if( m_UseInternalScoring )
 	{
 
@@ -356,6 +363,7 @@ void ScoreKeeperNormal::AddScoreInternal( TapNoteScore score )
 		auto context = opentelemetry::context::Context{};
 		scoreGauge->Record(static_cast<int64_t>(iScore), labelkv, context);
 	}
+	span->End();
 }
 
 int ScoreKeeperNormal::CalcNextToastyAt(int level)
@@ -416,6 +424,7 @@ int ScoreKeeperNormal::CalcNextToastyAt(int level)
 
 void ScoreKeeperNormal::HandleTapScore( const TapNote &tn )
 {
+	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::HandleTapScore");
 	TapNoteScore tns = tn.result.tns;
 
 	if( tn.type == TapNoteType_Mine )
@@ -440,6 +449,7 @@ void ScoreKeeperNormal::HandleTapScore( const TapNote &tn )
 	}
 
 	AddTapScore( tns );
+	span->End();
 }
 
 void ScoreKeeperNormal::HandleHoldCheckpointScore( const NoteData &nd, int iRow, int iNumHoldsHeldThisRow, int iNumHoldsMissedThisRow )
@@ -451,6 +461,7 @@ void ScoreKeeperNormal::HandleHoldCheckpointScore( const NoteData &nd, int iRow,
 
 void ScoreKeeperNormal::HandleTapNoteScoreInternal( TapNoteScore tns, TapNoteScore maximum, int row )
 {
+	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::HandleTapNoteScoreInternal");
 	// Update dance points.
 	if( !m_pPlayerStageStats->m_bFailed )
 		m_pPlayerStageStats->m_iActualDancePoints += TapNoteScoreToDancePoints( tns );
@@ -490,10 +501,12 @@ void ScoreKeeperNormal::HandleTapNoteScoreInternal( TapNoteScore tns, TapNoteSco
 
 	// increment the current total possible dance score
 	m_pPlayerStageStats->m_iCurPossibleDancePoints += TapNoteScoreToDancePoints( maximum );
+	span->End();
 }
 
 void ScoreKeeperNormal::HandleComboInternal( int iNumHitContinueCombo, int iNumHitMaintainCombo, int iNumBreakCombo, int iRow )
 {
+	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::HandleComboInternal");
 	// Regular combo
 	if( m_ComboIsPerRow )
 	{
@@ -527,10 +540,12 @@ void ScoreKeeperNormal::HandleComboInternal( int iNumHitContinueCombo, int iNumH
 	auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
 	auto context = opentelemetry::context::Context{};
 	comboGauge->Record(static_cast<int64_t>(m_pPlayerStageStats->m_iCurCombo), labelkv, context);
+	span->End();
 }
 
 void ScoreKeeperNormal::HandleRowComboInternal( TapNoteScore tns, int iNumTapsInRow, int iRow )
 {
+	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::HandleRowComboInternal");
 	if( m_ComboIsPerRow )
 	{
 		iNumTapsInRow = std::min( iNumTapsInRow, 1);
@@ -552,12 +567,14 @@ void ScoreKeeperNormal::HandleRowComboInternal( TapNoteScore tns, int iNumTapsIn
 			m_pPlayerStageStats->m_iCurMissCombo += ( m_MissComboIsPerRow ? 1 : iNumTapsInRow ) * multiplier;
 		}
 	}
+	span->End();
 }
 
 void ScoreKeeperNormal::GetRowCounts( const NoteData &nd, int iRow,
 					  int &iNumHitContinueCombo, int &iNumHitMaintainCombo,
 					  int &iNumBreakCombo )
 {
+	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::GetRowCounts");
 	iNumHitContinueCombo = iNumHitMaintainCombo = iNumBreakCombo = 0;
 	for( int track = 0; track < nd.GetNumTracks(); ++track )
 	{
@@ -573,16 +590,21 @@ void ScoreKeeperNormal::GetRowCounts( const NoteData &nd, int iRow,
 		else
 			++iNumBreakCombo;
 	}
+	span->End();
 }
 
 void ScoreKeeperNormal::HandleTapRowScore( const NoteData &nd, int iRow )
 {
+	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::HandleTapRowScore");
 	int iNumHitContinueCombo, iNumHitMaintainCombo, iNumBreakCombo;
 	GetRowCounts( nd, iRow, iNumHitContinueCombo, iNumHitMaintainCombo, iNumBreakCombo );
 
 	int iNumTapsInRow = iNumHitContinueCombo + iNumHitMaintainCombo + iNumBreakCombo;
 	if( iNumTapsInRow <= 0 )
+	{
+		span->End();
 		return;
+	}
 
 	m_iNumNotesHitThisRow = iNumTapsInRow;
 
@@ -609,6 +631,7 @@ void ScoreKeeperNormal::HandleTapRowScore( const NoteData &nd, int iRow )
 		&& !GAMESTATE->m_bDemonstrationOrJukebox )	// cheaters always prosper >:D -aj comment edit
 	{
 		m_cur_toasty_combo = 0;
+		span->End();
 		return;
 	}
 #endif //DEBUG
@@ -669,11 +692,13 @@ void ScoreKeeperNormal::HandleTapRowScore( const NoteData &nd, int iRow )
 	msg.SetParam( "MultiPlayer", m_pPlayerState->m_mp );
 	msg.SetParam( "ToastyCombo", m_cur_toasty_combo );
 	MESSAGEMAN->Broadcast( msg );
+	span->End();
 }
 
 
 void ScoreKeeperNormal::HandleHoldScore( const TapNote &tn )
 {
+	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::HandleHoldScore");
 	HoldNoteScore holdScore = tn.HoldResult.hns;
 
 	// update dance points totals
@@ -691,6 +716,7 @@ void ScoreKeeperNormal::HandleHoldScore( const TapNote &tn )
 	msg.SetParam( "PlayerNumber", m_pPlayerState->m_PlayerNumber );
 	msg.SetParam( "MultiPlayer", m_pPlayerState->m_mp );
 	MESSAGEMAN->Broadcast( msg );
+	span->End();
 }
 
 
