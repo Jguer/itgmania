@@ -90,6 +90,11 @@ MetricsProvider::MetricsProvider()
 	m_hitHistogram = meter->CreateUInt64Histogram("itgmania_note_hit_timing_histogram", "Distribution of note hit timings (ms) relative to perfect", "milliseconds");
 	m_hitCounter = meter->CreateUInt64Counter("itgmania_note_hits_total", "Total number of notes hit in the current session.", "unit");
 	m_hitGauge = meter->CreateInt64Gauge("itgmania_current_song_note_hits", "Number of notes hit in the current song.", "unit");
+	// New metrics
+	m_scoreGauge = meter->CreateInt64Gauge("itgmania_current_score", "Current EX Score or similar for the player.", "points");
+	m_comboGauge = meter->CreateInt64Gauge("itgmania_current_combo", "Current unbroken combo count.", "notes");
+	m_maxComboGauge = meter->CreateInt64Gauge("itgmania_max_combo", "Maximum combo achieved in the current song.", "notes");
+	m_lifeGauge = meter->CreateInt64Gauge("itgmania_life_bar", "Current fill level of the dance gauge/life bar (0-100).", "percent");
 
 	// Initialize logger
 	otlp_exporter::OtlpGrpcLogRecordExporterOptions log_exporter_options;
@@ -158,7 +163,12 @@ opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Histogram<uint6
 
 opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Gauge<int64_t>> MetricsProvider::GetGauge(std::string name)
 {
-	return m_hitGauge;
+	if (name == "hitGauge") return m_hitGauge;
+	if (name == "scoreGauge") return m_scoreGauge;
+	if (name == "comboGauge") return m_comboGauge;
+	if (name == "maxComboGauge") return m_maxComboGauge;
+	if (name == "lifeGauge") return m_lifeGauge;
+	return opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Gauge<int64_t>>();
 }
 
 opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Counter<uint64_t>> MetricsProvider::GetCounter()

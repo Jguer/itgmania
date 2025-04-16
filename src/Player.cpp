@@ -1853,9 +1853,18 @@ void Player::ChangeLifeRecord()
 		if( pn == PLAYER_2 )
 			fLife = 1.0f - fLife;
 	}
-	if( fLife != -1 )
+	if( fLife != -1 ) {
 		if( m_pPlayerStageStats )
 			m_pPlayerStageStats->SetLifeRecordAt( fLife, STATSMAN->m_CurStageStats.m_fStepsSeconds );
+		// Record life bar to metrics
+		auto lifeGauge = METRICS->GetGauge("lifeGauge");
+		std::map<std::string, std::string> labels = {
+			{"player_number", std::to_string(pn)}
+		};
+		auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+		auto context = opentelemetry::context::Context{};
+		lifeGauge->Record(static_cast<int64_t>(fLife * 100), labelkv, context);
+	}
 }
 
 int Player::GetClosestNoteDirectional( int col, int iStartRow, int iEndRow, bool bAllowGraded, bool bForward ) const
@@ -3113,8 +3122,17 @@ void Player::HandleTapRowScore( unsigned row )
 #undef CROSSED
 
 	// new max combo
-	if( m_pPlayerStageStats )
+	if( m_pPlayerStageStats ) {
 		m_pPlayerStageStats->m_iMaxCombo = std::max(m_pPlayerStageStats->m_iMaxCombo, iCurCombo);
+		// Record max combo to metrics
+		auto maxComboGauge = METRICS->GetGauge("maxComboGauge");
+		std::map<std::string, std::string> labels = {
+			{"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)}
+		};
+		auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+		auto context = opentelemetry::context::Context{};
+		maxComboGauge->Record(static_cast<int64_t>(m_pPlayerStageStats->m_iMaxCombo), labelkv, context);
+	}
 
 	/* Use the real current beat, not the beat we've been passed. That's because
 	 * we want to record the current life/combo to the current time; eg. if it's

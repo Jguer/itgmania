@@ -332,6 +332,14 @@ void ScoreKeeperNormal::AddScoreInternal( TapNoteScore score )
 		iScore = iScore - m_iScoreRemainder;
 
 		// LOG->Trace( "score: %i", iScore );
+		// Record score to metrics
+		auto scoreGauge = METRICS->GetGauge("scoreGauge");
+		std::map<std::string, std::string> labels = {
+			{"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)}
+		};
+		auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+		auto context = opentelemetry::context::Context{};
+		scoreGauge->Record(static_cast<int64_t>(iScore), labelkv, context);
 	}
 }
 
@@ -494,6 +502,14 @@ void ScoreKeeperNormal::HandleComboInternal( int iNumHitContinueCombo, int iNumH
 		int multiplier = ( iRow == -1 ? 1 : td.GetComboSegmentAtRow(iRow)->GetMissCombo());
 		m_pPlayerStageStats->m_iCurMissCombo += ( m_MissComboIsPerRow ? 1 : iNumBreakCombo ) * multiplier;
 	}
+	// Record combo to metrics
+	auto comboGauge = METRICS->GetGauge("comboGauge");
+	std::map<std::string, std::string> labels = {
+		{"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)}
+	};
+	auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+	auto context = opentelemetry::context::Context{};
+	comboGauge->Record(static_cast<int64_t>(m_pPlayerStageStats->m_iCurCombo), labelkv, context);
 }
 
 void ScoreKeeperNormal::HandleRowComboInternal( TapNoteScore tns, int iNumTapsInRow, int iRow )
