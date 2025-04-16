@@ -87,9 +87,9 @@ MetricsProvider::MetricsProvider()
 
 	// create metrics
 	opentelemetry::nostd::shared_ptr<metrics_api::Meter> meter = provider->GetMeter(name, "1.2.0");
-	m_hitHistogram = meter->CreateUInt64Histogram("hitHistogram", "hits", "unit");
-	m_hitCounter = meter->CreateUInt64Counter("hitCounter", "total hits of session", "unit");
-	m_hitGauge = meter->CreateInt64Gauge("hitGauge", "hits over the current song", "unit");
+	m_hitHistogram = meter->CreateUInt64Histogram("itgmania_note_hit_timing_histogram", "Distribution of note hit timings (ms) relative to perfect", "milliseconds");
+	m_hitCounter = meter->CreateUInt64Counter("itgmania_note_hits_total", "Total number of notes hit in the current session.", "unit");
+	m_hitGauge = meter->CreateInt64Gauge("itgmania_current_song_note_hits", "Number of notes hit in the current song.", "unit");
 
 	// Initialize logger
 	otlp_exporter::OtlpGrpcLogRecordExporterOptions log_exporter_options;
