@@ -237,6 +237,7 @@ void ScoreKeeperNormal::AddTapScore( TapNoteScore tns )
 void ScoreKeeperNormal::AddHoldScore( HoldNoteScore hns )
 {
 	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::AddHoldScore");
+	opentelemetry::trace::Scope scope(span);
 	if( hns == HNS_Held )
 		AddScoreInternal( TNS_W1 );
 	else if ( hns == HNS_LetGo )
@@ -247,6 +248,7 @@ void ScoreKeeperNormal::AddHoldScore( HoldNoteScore hns )
 void ScoreKeeperNormal::AddTapRowScore( TapNoteScore score, const NoteData &nd, int iRow )
 {
 	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::AddTapRowScore");
+	opentelemetry::trace::Scope scope(span);
 	AddScoreInternal( score );
 	span->End();
 }
@@ -255,6 +257,7 @@ extern ThemeMetric<bool> PENALIZE_TAP_SCORE_NONE;
 void ScoreKeeperNormal::HandleTapScoreNone()
 {
 	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::HandleTapScoreNone");
+	opentelemetry::trace::Scope scope(span);
 	if( PENALIZE_TAP_SCORE_NONE )
 	{
 		m_pPlayerStageStats->m_iCurCombo = 0;
@@ -284,6 +287,7 @@ static void AddSongStepLabels(std::map<std::string, std::string>& labels, int pl
 void ScoreKeeperNormal::AddScoreInternal( TapNoteScore score )
 {
 	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::AddScoreInternal");
+	opentelemetry::trace::Scope scope(span);
 	if( m_UseInternalScoring )
 	{
 
@@ -425,6 +429,7 @@ int ScoreKeeperNormal::CalcNextToastyAt(int level)
 void ScoreKeeperNormal::HandleTapScore( const TapNote &tn )
 {
 	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::HandleTapScore");
+	opentelemetry::trace::Scope scope(span);
 	TapNoteScore tns = tn.result.tns;
 
 	if( tn.type == TapNoteType_Mine )
@@ -462,6 +467,7 @@ void ScoreKeeperNormal::HandleHoldCheckpointScore( const NoteData &nd, int iRow,
 void ScoreKeeperNormal::HandleTapNoteScoreInternal( TapNoteScore tns, TapNoteScore maximum, int row )
 {
 	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::HandleTapNoteScoreInternal");
+	opentelemetry::trace::Scope scope(span);
 	// Update dance points.
 	if( !m_pPlayerStageStats->m_bFailed )
 		m_pPlayerStageStats->m_iActualDancePoints += TapNoteScoreToDancePoints( tns );
@@ -507,6 +513,7 @@ void ScoreKeeperNormal::HandleTapNoteScoreInternal( TapNoteScore tns, TapNoteSco
 void ScoreKeeperNormal::HandleComboInternal( int iNumHitContinueCombo, int iNumHitMaintainCombo, int iNumBreakCombo, int iRow )
 {
 	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::HandleComboInternal");
+	opentelemetry::trace::Scope scope(span);
 	// Regular combo
 	if( m_ComboIsPerRow )
 	{
@@ -546,6 +553,7 @@ void ScoreKeeperNormal::HandleComboInternal( int iNumHitContinueCombo, int iNumH
 void ScoreKeeperNormal::HandleRowComboInternal( TapNoteScore tns, int iNumTapsInRow, int iRow )
 {
 	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::HandleRowComboInternal");
+	opentelemetry::trace::Scope scope(span);
 	if( m_ComboIsPerRow )
 	{
 		iNumTapsInRow = std::min( iNumTapsInRow, 1);
@@ -575,6 +583,7 @@ void ScoreKeeperNormal::GetRowCounts( const NoteData &nd, int iRow,
 					  int &iNumBreakCombo )
 {
 	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::GetRowCounts");
+	opentelemetry::trace::Scope scope(span);
 	iNumHitContinueCombo = iNumHitMaintainCombo = iNumBreakCombo = 0;
 	for( int track = 0; track < nd.GetNumTracks(); ++track )
 	{
@@ -596,6 +605,7 @@ void ScoreKeeperNormal::GetRowCounts( const NoteData &nd, int iRow,
 void ScoreKeeperNormal::HandleTapRowScore( const NoteData &nd, int iRow )
 {
 	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::HandleTapRowScore");
+	opentelemetry::trace::Scope scope(span);
 	int iNumHitContinueCombo, iNumHitMaintainCombo, iNumBreakCombo;
 	GetRowCounts( nd, iRow, iNumHitContinueCombo, iNumHitMaintainCombo, iNumBreakCombo );
 
@@ -699,6 +709,7 @@ void ScoreKeeperNormal::HandleTapRowScore( const NoteData &nd, int iRow )
 void ScoreKeeperNormal::HandleHoldScore( const TapNote &tn )
 {
 	auto span = METRICS->GetTracer()->StartSpan("ScoreKeeperNormal::HandleHoldScore");
+	opentelemetry::trace::Scope scope(span);
 	HoldNoteScore holdScore = tn.HoldResult.hns;
 
 	// update dance points totals
