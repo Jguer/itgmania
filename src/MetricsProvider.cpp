@@ -95,6 +95,8 @@ MetricsProvider::MetricsProvider()
 	m_comboGauge = meter->CreateInt64Gauge("itgmania_current_combo", "Current unbroken combo count.", "notes");
 	m_maxComboGauge = meter->CreateInt64Gauge("itgmania_max_combo", "Maximum combo achieved in the current song.", "notes");
 	m_lifeGauge = meter->CreateInt64Gauge("itgmania_life_bar", "Current fill level of the dance gauge/life bar (0-100).", "percent");
+	// FPS metric
+	m_fpsGauge = meter->CreateInt64Gauge("itgmania_fps", "Current frames per second of the game.", "fps");
 
 	// Initialize logger
 	otlp_exporter::OtlpGrpcLogRecordExporterOptions log_exporter_options;
@@ -168,6 +170,7 @@ opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Gauge<int64_t>>
 	if (name == "comboGauge") return m_comboGauge;
 	if (name == "maxComboGauge") return m_maxComboGauge;
 	if (name == "lifeGauge") return m_lifeGauge;
+	if (name == "fpsGauge") return m_fpsGauge;
 	return opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Gauge<int64_t>>();
 }
 
