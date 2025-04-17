@@ -5,6 +5,7 @@
 #include "RageSoundManager.h"
 #include "PrefsManager.h"
 #include "RageDisplay.h"
+#include "MetricsProvider.h"
 
 #include "arch/ArchHooks/ArchHooks.h"
 
@@ -334,6 +335,10 @@ void GameLoop::RunGameLoop()
 		}
 		
 		SCREENMAN->Draw();
+
+		// Record FPS metric after drawing a frame
+		if (METRICS)
+			METRICS->GetGauge("fpsGauge")->Record(DISPLAY->GetFPS());
 	}
 
 	// If we ended mid-game, finish up.
