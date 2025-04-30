@@ -80,6 +80,7 @@ jobs:
           libxtst-dev
           nasm
           curl
+          libcurl4-openssl-dev
           libabsl-dev
           libgrpc-dev
           libgrpc++-dev
@@ -170,7 +171,7 @@ jobs:
         run: |
           git clone https://github.com/microsoft/vcpkg.git
           .\vcpkg\bootstrap-vcpkg.bat
-          .\vcpkg\vcpkg.exe install curl:x64-windows abseil:x64-windows
+          .\vcpkg\vcpkg.exe install curl:x64-windows abseil:x64-windows protobuf:x64-windows
         shell: pwsh
       - name: Configure
         run: cmake -B build -DWITH_FFMPEG_JOBS="$env:NUMBER_OF_PROCESSORS" -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
