@@ -42,6 +42,8 @@ jobs:
           libabsl-dev
           libgrpc-dev
           libgrpc++-dev
+          grpc-proto
+          grpc-tools
       - name: Configure
         run: cmake -B build -DWITH_FFMPEG_JOBS="$(nproc)"
       - name: Build
@@ -81,6 +83,8 @@ jobs:
           libabsl-dev
           libgrpc-dev
           libgrpc++-dev
+          grpc-proto
+          grpc-tools
       - name: Configure
         run: cmake -B build -DWITH_FFMPEG_JOBS="$(nproc)" -DWITH_MINIMAID=OFF
       - name: Build
