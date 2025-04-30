@@ -41,6 +41,7 @@ jobs:
           libcurl4-openssl-dev
           libabsl-dev
           libgrpc-dev
+          libgrpc++-dev
       - name: Configure
         run: cmake -B build -DWITH_FFMPEG_JOBS="$(nproc)"
       - name: Build
@@ -79,6 +80,7 @@ jobs:
           curl
           libabsl-dev
           libgrpc-dev
+          libgrpc++-dev
       - name: Configure
         run: cmake -B build -DWITH_FFMPEG_JOBS="$(nproc)" -DWITH_MINIMAID=OFF
       - name: Build
