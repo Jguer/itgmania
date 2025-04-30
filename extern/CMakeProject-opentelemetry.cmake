@@ -21,6 +21,9 @@ set(NLOHMANN_JSON_IS_EXTERNAL ON CACHE BOOL "Use external nlohmann_json library"
 set(WITH_ABI_VERSION_1 OFF CACHE BOOL "ABI version 1" FORCE)
 set(WITH_ABI_VERSION_2 ON CACHE BOOL "EXPERIMENTAL: ABI version 2 preview" FORCE)
 
+# Force static build for OpenTelemetry
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build all libraries as static" FORCE)
+
 # Add the library from source
 add_subdirectory(${OPENTELEMETRY_DIR} EXCLUDE_FROM_ALL)
 
