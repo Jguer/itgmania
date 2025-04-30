@@ -68,7 +68,7 @@ jobs:
         run: |
           git clone https://github.com/microsoft/vcpkg.git
           .\vcpkg\bootstrap-vcpkg.bat
-          .\vcpkg\vcpkg.exe install curl:x64-windows abseil:x64-windows
+          .\vcpkg\vcpkg.exe install curl:x64-windows abseil:x64-windows protobuf:x64-windows
         shell: pwsh
       - name: Configure
         run: ${{ matrix.configure }}
