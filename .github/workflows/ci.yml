@@ -40,10 +40,11 @@ jobs:
           curl
           libcurl4-openssl-dev
           libabsl-dev
+          grpc
           libgrpc-dev
           libgrpc++-dev
-          grpc-proto
-          grpc-tools
+          protobuf-compiler
+          protobuf-compiler-grpc
       - name: Configure
         run: cmake -B build -DWITH_FFMPEG_JOBS="$(nproc)"
       - name: Build
@@ -83,8 +84,8 @@ jobs:
           libabsl-dev
           libgrpc-dev
           libgrpc++-dev
-          grpc-proto
-          grpc-tools
+          protobuf-compiler
+          protobuf-compiler-grpc
       - name: Configure
         run: cmake -B build -DWITH_FFMPEG_JOBS="$(nproc)" -DWITH_MINIMAID=OFF
       - name: Build
@@ -112,7 +113,10 @@ jobs:
           abseil
           grpc
           protobuf
+          protobuf-c
           pkg-config
+      - name: Link grpc
+        run: brew link grpc
       - name: Configure
         run: cmake -B build -DCMAKE_OSX_ARCHITECTURES=arm64 -DWITH_FFMPEG_JOBS="$(sysctl -n hw.logicalcpu)"
       - name: Build
@@ -140,7 +144,10 @@ jobs:
           abseil
           grpc
           protobuf
+          protobuf-c
           pkg-config
+      - name: Link grpc
+        run: brew link grpc
       - name: Configure
         run: cmake -B build -DCMAKE_OSX_ARCHITECTURES=x86_64 -DWITH_FFMPEG_JOBS="$(sysctl -n hw.logicalcpu)"
       - name: Build
@@ -164,7 +171,7 @@ jobs:
         run: |
           git clone https://github.com/microsoft/vcpkg.git
           .\vcpkg\bootstrap-vcpkg.bat
-          .\vcpkg\vcpkg.exe install curl:x64-windows
+          .\vcpkg\vcpkg.exe install curl:x64-windows abseil:x64-windows
         shell: pwsh
       - name: Configure
         run: cmake -B build -DWITH_FFMPEG_JOBS="$env:NUMBER_OF_PROCESSORS" -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
