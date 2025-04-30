@@ -16,22 +16,22 @@ jobs:
         include:
           - os: ubuntu-latest
             name: Ubuntu (x86_64)
-            install: sudo apt-get update && sudo apt-get install -y libasound2-dev libgl-dev libglu1-mesa-dev libgtk-3-dev libjack-dev libmad0-dev libpulse-dev libudev-dev libxinerama-dev libx11-dev libxrandr-dev libxtst-dev nasm
+            install: sudo apt-get update && sudo apt-get install -y libasound2-dev libgl-dev libglu1-mesa-dev libgtk-3-dev libjack-dev libmad0-dev libpulse-dev libudev-dev libxinerama-dev libx11-dev libxrandr-dev libxtst-dev nasm curl libabsl-dev libgrpc-dev
             configure: cmake -B build -DWITH_FFMPEG_JOBS="$(nproc)"
             build: cmake --build build --parallel "$(nproc)"
           - os: ubuntu-24.04-arm
             name: Ubuntu (ARM)
-            install: sudo apt-get update && sudo apt-get install -y libasound2-dev libgl-dev libglu1-mesa-dev libgtk-3-dev libjack-dev libmad0-dev libpulse-dev libudev-dev libxinerama-dev libx11-dev libxrandr-dev libxtst-dev nasm
+            install: sudo apt-get update && sudo apt-get install -y libasound2-dev libgl-dev libglu1-mesa-dev libgtk-3-dev libjack-dev libmad0-dev libpulse-dev libudev-dev libxinerama-dev libx11-dev libxrandr-dev libxtst-dev nasm curl libabsl-dev libgrpc-dev
             configure: cmake -B build -DWITH_FFMPEG_JOBS="$(nproc)" -DWITH_MINIMAID=OFF
             build: cmake --build build --parallel "$(nproc)"
           - os: macos-latest
             name: macOS (M1)
-            install: brew install nasm
+            install: brew install nasm curl abseil grpc
             configure: cmake -B build -DCMAKE_OSX_ARCHITECTURES=arm64 -DWITH_FFMPEG_JOBS="$(sysctl -n hw.logicalcpu)"
             build: cmake --build build --parallel "$(sysctl -n hw.logicalcpu)"
           - os: macos-13
             name: macOS (Intel)
-            install: brew install nasm
+            install: brew install nasm curl abseil grpc
             configure: cmake -B build -DCMAKE_OSX_ARCHITECTURES=x86_64 -DWITH_FFMPEG_JOBS="$(sysctl -n hw.logicalcpu)"
             build: cmake --build build --parallel "$(sysctl -n hw.logicalcpu)"
           - os: windows-latest
