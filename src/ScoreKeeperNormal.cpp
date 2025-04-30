@@ -538,15 +538,6 @@ void ScoreKeeperNormal::HandleComboInternal( int iNumHitContinueCombo, int iNumH
 		int multiplier = ( iRow == -1 ? 1 : td.GetComboSegmentAtRow(iRow)->GetMissCombo());
 		m_pPlayerStageStats->m_iCurMissCombo += ( m_MissComboIsPerRow ? 1 : iNumBreakCombo ) * multiplier;
 	}
-	// Record combo to metrics
-	auto comboGauge = METRICS->GetGauge("comboGauge");
-	std::map<std::string, std::string> labels = {
-		{"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)}
-	};
-	AddSongStepLabels(labels, m_pPlayerState->m_PlayerNumber);
-	auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
-	auto context = opentelemetry::context::Context{};
-	comboGauge->Record(static_cast<int64_t>(m_pPlayerStageStats->m_iCurCombo), labelkv, context);
 	span->End();
 }
 
