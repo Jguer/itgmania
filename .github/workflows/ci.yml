@@ -117,7 +117,7 @@ jobs:
       - name: Link grpc
         run: brew link grpc
       - name: Configure
-        run: cmake -B build -DCMAKE_OSX_ARCHITECTURES=arm64 -DWITH_FFMPEG_JOBS="$(sysctl -n hw.logicalcpu)"
+        run: cmake -B build -DCMAKE_OSX_ARCHITECTURES=arm64 -DWITH_FFMPEG_JOBS="$(sysctl -n hw.logicalcpu)" -DCMAKE_PREFIX_PATH=$(brew --prefix)
       - name: Build
         run: cmake --build build --parallel "$(sysctl -n hw.logicalcpu)"
 
@@ -148,7 +148,7 @@ jobs:
       - name: Link grpc
         run: brew link grpc
       - name: Configure
-        run: cmake -B build -DCMAKE_OSX_ARCHITECTURES=x86_64 -DWITH_FFMPEG_JOBS="$(sysctl -n hw.logicalcpu)"
+        run: cmake -B build -DCMAKE_OSX_ARCHITECTURES=x86_64 -DWITH_FFMPEG_JOBS="$(sysctl -n hw.logicalcpu)" -DCMAKE_PREFIX_PATH=$(brew --prefix)
       - name: Build
         run: cmake --build build --parallel "$(sysctl -n hw.logicalcpu)"
 
