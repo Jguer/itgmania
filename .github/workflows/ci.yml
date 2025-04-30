@@ -37,6 +37,9 @@ jobs:
           libxrandr-dev
           libxtst-dev
           nasm
+          curl
+          libabsl-dev
+          libgrpc-dev
       - name: Configure
         run: cmake -B build -DWITH_FFMPEG_JOBS="$(nproc)"
       - name: Build
@@ -72,6 +75,9 @@ jobs:
           libxrandr-dev
           libxtst-dev
           nasm
+          curl
+          libabsl-dev
+          libgrpc-dev
       - name: Configure
         run: cmake -B build -DWITH_FFMPEG_JOBS="$(nproc)" -DWITH_MINIMAID=OFF
       - name: Build
@@ -95,6 +101,9 @@ jobs:
       - name: Install dependencies
         run: brew install
           nasm
+          curl
+          abseil
+          grpc
       - name: Configure
         run: cmake -B build -DCMAKE_OSX_ARCHITECTURES=arm64 -DWITH_FFMPEG_JOBS="$(sysctl -n hw.logicalcpu)"
       - name: Build
@@ -118,6 +127,9 @@ jobs:
       - name: Install dependencies
         run: brew install
           nasm
+          curl
+          abseil
+          grpc
       - name: Configure
         run: cmake -B build -DCMAKE_OSX_ARCHITECTURES=x86_64 -DWITH_FFMPEG_JOBS="$(sysctl -n hw.logicalcpu)"
       - name: Build
