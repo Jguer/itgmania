@@ -40,7 +40,6 @@ jobs:
           curl
           libcurl4-openssl-dev
           libabsl-dev
-          grpc
           libgrpc-dev
           libgrpc++-dev
           protobuf-compiler
