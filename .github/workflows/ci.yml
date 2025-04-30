@@ -38,6 +38,7 @@ jobs:
           libxtst-dev
           nasm
           curl
+          libcurl4-openssl-dev
           libabsl-dev
           libgrpc-dev
       - name: Configure
@@ -104,6 +105,8 @@ jobs:
           curl
           abseil
           grpc
+          protobuf
+          pkg-config
       - name: Configure
         run: cmake -B build -DCMAKE_OSX_ARCHITECTURES=arm64 -DWITH_FFMPEG_JOBS="$(sysctl -n hw.logicalcpu)"
       - name: Build
@@ -130,6 +133,8 @@ jobs:
           curl
           abseil
           grpc
+          protobuf
+          pkg-config
       - name: Configure
         run: cmake -B build -DCMAKE_OSX_ARCHITECTURES=x86_64 -DWITH_FFMPEG_JOBS="$(sysctl -n hw.logicalcpu)"
       - name: Build
@@ -149,8 +154,14 @@ jobs:
           $vsPath = &"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           &"$vsPath\VC\Auxiliary\Build\vcvarsall.bat" x64
         shell: pwsh
+      - name: Install vcpkg and curl
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git
+          .\vcpkg\bootstrap-vcpkg.bat
+          .\vcpkg\vcpkg.exe install curl:x64-windows
+        shell: pwsh
       - name: Configure
-        run: cmake -B build -DWITH_FFMPEG_JOBS="$env:NUMBER_OF_PROCESSORS"
+        run: cmake -B build -DWITH_FFMPEG_JOBS="$env:NUMBER_OF_PROCESSORS" -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
       - name: Build
         run: cmake --build build --parallel "$env:NUMBER_OF_PROCESSORS"
 
