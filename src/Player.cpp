@@ -49,6 +49,21 @@
 RString ATTACK_DISPLAY_X_NAME( size_t p, size_t both_sides );
 void TimingWindowSecondsInit( size_t /*TimingWindow*/ i, RString &sNameOut, float &defaultValueOut );
 
+// Duplicate of ScoreKeeperNormal.cpp - TO REFACTOR
+static void AddSongStepLabels(std::map<std::string, std::string>& labels, int playerNumber) {
+    Song* song = GAMESTATE->m_pCurSong;
+    Steps* steps = GAMESTATE->m_pCurSteps[playerNumber];
+    if (song) {
+        labels["song_title"] = song->GetMainTitle();
+        labels["song_artist"] = song->GetDisplayArtist();
+    }
+    if (steps) {
+        labels["difficulty"] = DifficultyToString(steps->GetDifficulty());
+        labels["meter"] = std::to_string(steps->GetMeter());
+    }
+}
+
+
 /**
  * @brief Helper class to ensure that each row is only judged once without taking too much memory.
  */
@@ -3100,6 +3115,20 @@ void Player::HandleTapRowScore( unsigned row )
 	if( m_pPlayerStageStats )
 	{
 		SetCombo( iCurCombo, iCurMissCombo );
+
+		// Record combo to metrics
+		if (METRICS) {
+			auto comboGauge = METRICS->GetGauge("comboGauge");
+			if (comboGauge) {
+				std::map<std::string, std::string> labels = {
+					{"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)}
+				};
+				AddSongStepLabels(labels, m_pPlayerState->m_PlayerNumber);
+				auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+				auto context = opentelemetry::context::Context{};
+				comboGauge->Record(static_cast<int64_t>(iCurCombo), labelkv, context);
+			}
+		}
 	}
 
 #define CROSSED( x ) (iOldCombo<x && iCurCombo>=x)
