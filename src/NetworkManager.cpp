@@ -9,6 +9,7 @@
 #include "SpecialFiles.h"
 #include "StdString.h"
 #include "ver.h"
+#include "MetricsProvider.h"
 
 #include <ixwebsocket/IXHttpClient.h>
 #include <ixwebsocket/IXNetSystem.h>
@@ -18,6 +19,8 @@
 #include <algorithm>
 #include <climits>
 #include <cstddef>
+#include <chrono>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <unordered_map>
@@ -165,6 +168,17 @@ HttpRequestFuturePtr NetworkManager::HttpRequest(const HttpRequestArgs& args)
 	auto &client = args.downloadFile.empty() ? this->httpClient : this->downloadClient;
 	auto downloadFile = std::make_shared<RageFile>();
 	std::string downloadFilename;
+	const auto requestStart = std::chrono::steady_clock::now();
+	std::string protocol;
+	std::string host;
+	std::string path;
+	std::string query;
+	int port;
+	const bool parsedRequestUrl = ix::UrlParser::parse(args.url, protocol, host, path, query, port);
+	(void)query;
+	(void)path;
+	(void)protocol;
+	(void)port;
 
 	ix::HttpRequestArgsPtr req = client.createRequest(args.url, args.method);
 	req->body = args.body;
@@ -205,7 +219,7 @@ HttpRequestFuturePtr NetworkManager::HttpRequest(const HttpRequestArgs& args)
 	if (args.onProgress)
 		req->onProgressCallback = args.onProgress;
 
-	client.performRequest(req, [args, downloadFile, downloadFilename](const ix::HttpResponsePtr& response) {
+	client.performRequest(req, [args, downloadFile, downloadFilename, requestStart, parsedRequestUrl, host](const ix::HttpResponsePtr& response) {
 		if (!args.downloadFile.empty())
 		{
 			RString error = downloadFile->GetError();
@@ -225,6 +239,27 @@ HttpRequestFuturePtr NetworkManager::HttpRequest(const HttpRequestArgs& args)
 		if (args.onResponse)
 			args.onResponse(response);
 
+		if (METRICS && response)
+		{
+			const auto duration_ms = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - requestStart).count());
+			std::map<std::string, std::string> labels = {
+				{"operation", "http_request"},
+				{"method", args.method},
+				{"host", parsedRequestUrl ? host : "unknown"},
+				{"result", response->errorCode == ix::HttpErrorCode::Ok ? "success" : "error"}
+			};
+			labels["status_code"] = std::to_string(response->statusCode);
+			auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+			auto context = opentelemetry::context::Context{};
+			METRICS->GetHttpRequestDuration()->Record(duration_ms, labelkv, context);
+			METRICS->GetHttpRequestCounter()->Add(1, labelkv, context);
+			if (!parsedRequestUrl || response->errorCode != ix::HttpErrorCode::Ok)
+			{
+				METRICS->GetHttpRequestErrorCounter()->Add(1, labelkv, context);
+			}
+		}
+
 		if (!args.downloadFile.empty())
 		{
 			FILEMAN->Remove(downloadFilename);
@@ -238,10 +273,49 @@ WebSocketHandlePtr NetworkManager::WebSocket(const WebSocketArgs& args)
 {
 	auto handle = std::make_shared<WebSocketHandle>();
 	handle->onClose = args.onClose;
+	const auto openStart = std::chrono::steady_clock::now();
+	std::string wsProtocol;
+	std::string wsHost;
+	std::string wsPath;
+	std::string wsQuery;
+	int wsPort;
+	const bool parsedWebSocketUrl = ix::UrlParser::parse(args.url, wsProtocol, wsHost, wsPath, wsQuery, wsPort);
+	(void)wsProtocol;
+	(void)wsPath;
+	(void)wsQuery;
+	(void)wsPort;
 
 	handle->webSocket.setUrl(args.url);
 	handle->webSocket.setTLSOptions(this->tlsOptions);
-	handle->webSocket.setOnMessageCallback(args.onMessage);
+	handle->webSocket.setOnMessageCallback([args, openStart, parsedWebSocketUrl, wsHost](
+		const ix::WebSocketMessagePtr& msg) {
+		if (METRICS && msg->type == ix::WebSocketMessageType::Open)
+		{
+			const auto duration_ms = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - openStart).count());
+		std::map<std::string, std::string> labels = {
+			{"operation", "websocket_open"},
+			{"host", parsedWebSocketUrl ? wsHost : "unknown"},
+			};
+			auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+			auto context = opentelemetry::context::Context{};
+			METRICS->GetWebSocketOpenDuration()->Record(duration_ms, labelkv, context);
+			METRICS->GetWebSocketOpenCounter()->Add(1, labelkv, context);
+		}
+		else if (METRICS && msg->type == ix::WebSocketMessageType::Error)
+		{
+			std::map<std::string, std::string> labels = {
+				{"operation", "websocket"},
+				{"host", parsedWebSocketUrl ? wsHost : "unknown"},
+				{"event", "error"}
+			};
+			auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+			auto context = opentelemetry::context::Context{};
+			METRICS->GetWebSocketErrorCounter()->Add(1, labelkv, context);
+		}
+		if (args.onMessage)
+			args.onMessage(msg);
+	});
 
 	ix::WebSocketHttpHeaders headers;
 	headers["User-Agent"] = this->GetUserAgent();

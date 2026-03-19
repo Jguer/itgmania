@@ -23,6 +23,8 @@
 #include "RageInput.h"
 
 #include <cmath>
+#include <chrono>
+#include <map>
 #include <vector>
 
 static RageTimer g_GameplayTimer;
@@ -314,6 +316,8 @@ void GameLoop::RunGameLoop()
 
 	while( !ArchHooks::UserQuit() )
 	{
+		const auto frame_start = std::chrono::steady_clock::now();
+
 		if(!g_NewGame.empty())
 		{
 			DoChangeGame();
@@ -333,7 +337,22 @@ void GameLoop::RunGameLoop()
 
 		// Record FPS metric after drawing a frame
 		if (METRICS)
+		{
 			METRICS->GetGauge("fpsGauge")->Record(DISPLAY->GetFPS());
+
+			const auto frame_ms = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - frame_start).count());
+
+			std::map<std::string, std::string> labels;
+			labels["phase"] = "run_loop";
+			auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+			auto context = opentelemetry::context::Context{};
+			METRICS->GetFrameTimeHistogram()->Record(frame_ms, labelkv, context);
+			if( frame_ms > 33 )
+			{
+				METRICS->GetFrameDropCounter()->Add(1, labelkv, context);
+			}
+		}
 	}
 
 	// If we ended mid-game, finish up.

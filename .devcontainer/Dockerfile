@@ -1,4 +1,4 @@
-FROM docker.io/fedora:41
+FROM docker.io/fedora:43
 
 # Install necessary packages for building ITGmania
 RUN dnf -y update && dnf -y install --skip-unavailable \
@@ -12,7 +12,7 @@ RUN dnf -y update && dnf -y install --skip-unavailable \
     curl-devel \
     wget \
     ninja-build \
-    pkgconfig \
+    pkgconf-pkg-config \
     alsa-lib-devel \
     pulseaudio-libs-devel \
     jack-audio-connection-kit-devel \
@@ -38,7 +38,6 @@ RUN dnf -y update && dnf -y install --skip-unavailable \
     libvorbis-devel \
     grpc-devel \
     zlib-ng-compat-static \
-    grpc-devel \
     grpc-plugins \
     libmad-devel \
     bzip2-devel \

@@ -61,9 +61,18 @@
 #include "Profile.h" // for replay data stuff
 #include "RageDisplay.h"
 #include "GameplayHelpers.h"
+#include "MetricsProvider.h"
 
+#include "opentelemetry/common/attribute_value.h"
+#include "opentelemetry/common/key_value_iterable_view.h"
+#include "opentelemetry/context/runtime_context.h"
+#include "opentelemetry/logs/severity.h"
+#include "opentelemetry/trace/scope.h"
+
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <map>
 #include <vector>
 
 // Defines
@@ -2580,6 +2589,193 @@ void ScreenGameplay::SongFinished()
 		pi->m_pActiveAttackList->Refresh();
 }
 
+namespace
+{
+static void AddGameplayHistLabels(std::map<std::string, std::string>& labels, PlayerNumber pn)
+{
+	labels["player_number"] = std::to_string(pn);
+	Steps* pSteps = GAMESTATE->m_pCurSteps[pn];
+	if (pSteps)
+	{
+		labels["difficulty"] = DifficultyToString(pSteps->GetDifficulty());
+		labels["meter"] = std::to_string(pSteps->GetMeter());
+	}
+	const Style* pStyle = GAMESTATE->GetCurrentStyle(pn);
+	if (pStyle)
+		labels["steps_type"] = StepsTypeToString(pStyle->m_StepsType);
+}
+
+void EmitSongPlayOpenTelemetry(PlayerNumber pn)
+{
+	if (!METRICS)
+		return;
+	auto tracer = METRICS->GetTracer();
+	if (!tracer)
+		return;
+
+	const PlayerStageStats& pss = STATSMAN->m_CurStageStats.m_player[pn];
+	Song* pSong = GAMESTATE->m_pCurSong;
+	Steps* pSteps = GAMESTATE->m_pCurSteps[pn];
+	const Style* pStyle = GAMESTATE->GetCurrentStyle(pn);
+
+	RString songTitle, songArtist, songGroup, songHash, chartKey, diffStr, stepsTypeStr;
+	RString gradeStr = GradeToString(pss.GetGrade());
+	RString playerName;
+	RString playerGuid;
+	if (PROFILEMAN->IsPersistentProfile(pn))
+	{
+		const Profile* pProfile = PROFILEMAN->GetProfile(pn);
+		playerName = pProfile->GetDisplayNameOrHighScoreName();
+		playerGuid = pProfile->m_sGuid;
+	}
+
+	RString modifiers = GAMESTATE->m_pPlayerState[pn]->m_PlayerOptions.GetStage().GetString();
+	RString songOptions = GAMESTATE->m_SongOptions.GetStage().GetString();
+	RString modCombined = modifiers;
+	if (!songOptions.empty())
+		modCombined = modCombined.empty() ? songOptions : (modifiers + ", " + songOptions);
+
+	RString courseTitle;
+	if (GAMESTATE->IsCourseMode() && GAMESTATE->m_pCurCourse)
+		courseTitle = GAMESTATE->m_pCurCourse->GetDisplayFullTitle();
+
+	if (pSong)
+	{
+		songTitle = pSong->GetMainTitle();
+		songArtist = pSong->GetDisplayArtist();
+		songGroup = pSong->m_sGroupName;
+		songHash = pSong->GetFileHash();
+	}
+	if (pSteps)
+	{
+		diffStr = DifficultyToString(pSteps->GetDifficulty());
+		chartKey = pSteps->GetChartKey();
+	}
+	if (pStyle)
+		stepsTypeStr = StepsTypeToString(pStyle->m_StepsType);
+
+	auto playSpan = tracer->StartSpan("song_play");
+	opentelemetry::trace::Scope scope(playSpan);
+
+	using AV = opentelemetry::common::AttributeValue;
+	using SV = opentelemetry::nostd::string_view;
+
+	const double durationSec = static_cast<double>(STATSMAN->m_CurStageStats.m_fGameplaySeconds);
+	playSpan->SetAttribute("gameplay.duration_seconds", durationSec);
+	playSpan->SetAttribute("stage.is_course", GAMESTATE->IsCourseMode());
+	playSpan->SetAttribute("stage.used_autoplay", STATSMAN->m_CurStageStats.m_bUsedAutoplay);
+	playSpan->SetAttribute("player.number", static_cast<int64_t>(pn));
+	if (!playerName.empty())
+		playSpan->SetAttribute("player.name", SV(playerName.c_str(), playerName.size()));
+	if (!playerGuid.empty())
+		playSpan->SetAttribute("player.guid", SV(playerGuid.c_str(), playerGuid.size()));
+	if (!songTitle.empty())
+		playSpan->SetAttribute("song.title", SV(songTitle.c_str(), songTitle.size()));
+	if (!songArtist.empty())
+		playSpan->SetAttribute("song.artist", SV(songArtist.c_str(), songArtist.size()));
+	if (!songGroup.empty())
+		playSpan->SetAttribute("song.group", SV(songGroup.c_str(), songGroup.size()));
+	if (!songHash.empty())
+		playSpan->SetAttribute("song.hash", SV(songHash.c_str(), songHash.size()));
+	if (!chartKey.empty())
+		playSpan->SetAttribute("chart.key", SV(chartKey.c_str(), chartKey.size()));
+	if (!diffStr.empty())
+		playSpan->SetAttribute("chart.difficulty", SV(diffStr.c_str(), diffStr.size()));
+	if (pSteps)
+		playSpan->SetAttribute("chart.meter", static_cast<int64_t>(pSteps->GetMeter()));
+	if (!stepsTypeStr.empty())
+		playSpan->SetAttribute("chart.steps_type", SV(stepsTypeStr.c_str(), stepsTypeStr.size()));
+	if (!courseTitle.empty())
+		playSpan->SetAttribute("course.title", SV(courseTitle.c_str(), courseTitle.size()));
+	if (!modCombined.empty())
+		playSpan->SetAttribute("modifiers", SV(modCombined.c_str(), modCombined.size()));
+
+	playSpan->SetAttribute("result.score", static_cast<int64_t>(pss.m_iScore));
+	playSpan->SetAttribute("result.percent_dp", static_cast<double>(pss.GetPercentDancePoints()));
+	playSpan->SetAttribute("result.grade", SV(gradeStr.c_str(), gradeStr.size()));
+	playSpan->SetAttribute("result.max_combo", static_cast<int64_t>(pss.GetMaxCombo().m_cnt));
+	playSpan->SetAttribute("result.failed", pss.m_bFailed);
+	playSpan->SetAttribute("result.disqualified", pss.IsDisqualified());
+	playSpan->SetAttribute("result.alive_seconds", static_cast<double>(pss.m_fAliveSeconds));
+
+	playSpan->SetAttribute("result.w1", static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W1]));
+	playSpan->SetAttribute("result.w2", static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W2]));
+	playSpan->SetAttribute("result.w3", static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W3]));
+	playSpan->SetAttribute("result.w4", static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W4]));
+	playSpan->SetAttribute("result.w5", static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W5]));
+	playSpan->SetAttribute("result.miss", static_cast<int64_t>(pss.m_iTapNoteScores[TNS_Miss]));
+	playSpan->SetAttribute("result.mines_hit", static_cast<int64_t>(pss.m_iTapNoteScores[TNS_HitMine]));
+	playSpan->SetAttribute("result.mines_avoided", static_cast<int64_t>(pss.m_iTapNoteScores[TNS_AvoidMine]));
+	playSpan->SetAttribute("result.checkpoint_hit", static_cast<int64_t>(pss.m_iTapNoteScores[TNS_CheckpointHit]));
+	playSpan->SetAttribute("result.checkpoint_miss", static_cast<int64_t>(pss.m_iTapNoteScores[TNS_CheckpointMiss]));
+
+	playSpan->SetAttribute("result.holds_held", static_cast<int64_t>(pss.m_iHoldNoteScores[HNS_Held]));
+	playSpan->SetAttribute("result.holds_let_go", static_cast<int64_t>(pss.m_iHoldNoteScores[HNS_LetGo]));
+	playSpan->SetAttribute("result.holds_missed", static_cast<int64_t>(pss.m_iHoldNoteScores[HNS_Missed]));
+
+	std::map<std::string, std::string> histLabels;
+	AddGameplayHistLabels(histLabels, pn);
+	auto histLabelkv = opentelemetry::common::KeyValueIterableView<decltype(histLabels)>{histLabels};
+	auto traceCtx = opentelemetry::context::RuntimeContext::GetCurrent();
+
+	const float pctDp = pss.GetPercentDancePoints();
+	const uint64_t finalAccuracyBps = static_cast<uint64_t>(
+		std::lround(std::clamp(pctDp, 0.f, 1.f) * 10000.f));
+	const uint64_t finalScore = static_cast<uint64_t>(pss.m_iScore);
+	const uint64_t maxCombo = static_cast<uint64_t>(std::max(0, pss.GetMaxCombo().m_cnt));
+	const uint64_t durationMs = static_cast<uint64_t>(std::max(
+		0.0, static_cast<double>(STATSMAN->m_CurStageStats.m_fGameplaySeconds) * 1000.0));
+	const float life = pss.GetCurrentLife();
+	const uint64_t lifePct = static_cast<uint64_t>(
+		std::lround(std::clamp(life, 0.f, 1.f) * 100.f));
+
+	if (auto h = METRICS->GetSongFinalAccuracyBpsHistogram())
+		h->Record(finalAccuracyBps, histLabelkv, traceCtx);
+	if (auto h = METRICS->GetSongFinalScoreHistogram())
+		h->Record(finalScore, histLabelkv, traceCtx);
+	if (auto h = METRICS->GetSongMaxComboHistogram())
+		h->Record(maxCombo, histLabelkv, traceCtx);
+	if (auto h = METRICS->GetSongPlayDurationMsHistogram())
+		h->Record(durationMs, histLabelkv, traceCtx);
+	if (auto h = METRICS->GetSongFinalLifePercentHistogram())
+		h->Record(lifePct, histLabelkv, traceCtx);
+
+	std::map<std::string, std::string> counterLabels;
+	AddGameplayHistLabels(counterLabels, pn);
+	auto counterLabelkv = opentelemetry::common::KeyValueIterableView<decltype(counterLabels)>{counterLabels};
+	if (auto songCounter = METRICS->GetSongPlaysCounter())
+		songCounter->Add(1, counterLabelkv, traceCtx);
+
+	std::vector<std::pair<SV, AV>> logAttrs;
+	logAttrs.reserve(32);
+	logAttrs.emplace_back(SV("player.number"), AV(static_cast<int64_t>(pn)));
+	if (!playerName.empty())
+		logAttrs.emplace_back(SV("player.name"), AV(SV(playerName.c_str(), playerName.size())));
+	if (!songTitle.empty())
+		logAttrs.emplace_back(SV("song.title"), AV(SV(songTitle.c_str(), songTitle.size())));
+	if (!chartKey.empty())
+		logAttrs.emplace_back(SV("chart.key"), AV(SV(chartKey.c_str(), chartKey.size())));
+	if (!diffStr.empty())
+		logAttrs.emplace_back(SV("chart.difficulty"), AV(SV(diffStr.c_str(), diffStr.size())));
+	logAttrs.emplace_back(SV("result.score"), AV(static_cast<int64_t>(pss.m_iScore)));
+	logAttrs.emplace_back(SV("result.percent_dp"), AV(static_cast<double>(pss.GetPercentDancePoints())));
+	logAttrs.emplace_back(SV("result.grade"), AV(SV(gradeStr.c_str(), gradeStr.size())));
+	logAttrs.emplace_back(SV("result.max_combo"), AV(static_cast<int64_t>(pss.GetMaxCombo().m_cnt)));
+	logAttrs.emplace_back(SV("result.failed"), AV(pss.m_bFailed));
+
+	if (auto logger = METRICS->GetLogger())
+	{
+		logger->EmitLogRecord(
+			opentelemetry::logs::Severity::kInfo,
+			playSpan->GetContext(),
+			SV("itgmania song_play"),
+			logAttrs);
+	}
+
+	playSpan->End();
+}
+} // namespace
+
 void ScreenGameplay::StageFinished( bool bBackedOut )
 {
 	if( GAMESTATE->IsCourseMode() && GAMESTATE->m_PlayMode != PLAY_MODE_ENDLESS )
@@ -2612,6 +2808,9 @@ void ScreenGameplay::StageFinished( bool bBackedOut )
 	FOREACH_HumanPlayer( pn )
 		STATSMAN->m_CurStageStats.m_player[pn].CalcAwards( pn, STATSMAN->m_CurStageStats.m_bGaveUp, STATSMAN->m_CurStageStats.m_bUsedAutoplay );
 	STATSMAN->m_CurStageStats.FinalizeScores( false );
+
+	FOREACH_HumanPlayer( pn )
+		EmitSongPlayOpenTelemetry(pn);
 
 	GAMESTATE->CommitStageStats();
 

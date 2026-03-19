@@ -315,6 +315,11 @@ PrefsManager::PrefsManager() :
 	m_sOTLPMetricsURL		( "OTLPMetricsURL",	"localhost:4317" ),
 	m_sOTLPLogsURL			( "OTLPLogsURL",	"localhost:4317" ),
 	m_sOTLPTracesURL		( "OTLPTracesURL",	"localhost:4317" ),
+	m_bOTelEnabled			( "OTelEnabled",		false ),
+	m_bOTelMetricsEnabled	( "OTelMetricsEnabled",	true ),
+	m_bOTelLogsEnabled		( "OTelLogsEnabled",		true ),
+	m_bOTelTracesEnabled	( "OTelTracesEnabled",	true ),
+	m_fOTelTraceSampleRate	( "OTelTraceSampleRate",	1.0f ),
 
 	m_custom_songs_enable("CustomSongsEnable", false),
 	m_custom_songs_max_count("CustomSongsMaxCount", 1000), // No limit. -- 2 Unlimited

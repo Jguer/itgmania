@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <vector>
 #include "MetricsProvider.h"
+#include "opentelemetry/context/runtime_context.h"
 
 
 static RString PercentScoreWeightName( size_t i ) { return "PercentScoreWeight" + ScoreEventToString( (ScoreEvent)i ); }
@@ -272,12 +273,7 @@ void ScoreKeeperNormal::HandleTapScoreNone()
 
 // Helper to add song and steps info to metric labels
 static void AddSongStepLabels(std::map<std::string, std::string>& labels, int playerNumber) {
-    Song* song = GAMESTATE->m_pCurSong;
     Steps* steps = GAMESTATE->m_pCurSteps[playerNumber];
-    if (song) {
-        labels["song_title"] = song->GetMainTitle();
-        labels["song_artist"] = song->GetDisplayArtist();
-    }
     if (steps) {
         labels["difficulty"] = DifficultyToString(steps->GetDifficulty());
         labels["meter"] = std::to_string(steps->GetMeter());
@@ -498,15 +494,35 @@ void ScoreKeeperNormal::HandleTapNoteScoreInternal( TapNoteScore tns, TapNoteSco
 		m_pPlayerStageStats->m_iTapNoteScores[tns] += 1;
 	}
 
-	LOG->Info("updated tap note score %s: %d", TapNoteScoreToLocalizedString(tns).c_str(), m_pPlayerStageStats->m_iTapNoteScores[tns]);
 	auto gauge = METRICS->GetGauge("hitGauge");
 	auto context           = opentelemetry::context::Context{};
     gauge->Record(m_pPlayerStageStats->m_iTapNoteScores[tns], labelkv, context);
 	hitCounter->Add(1, labelkv, context);
-	
 
 	// increment the current total possible dance score
 	m_pPlayerStageStats->m_iCurPossibleDancePoints += TapNoteScoreToDancePoints( maximum );
+
+	if (METRICS)
+	{
+		std::map<std::string, std::string> accLabels = {
+			{"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)},
+		};
+		AddSongStepLabels(accLabels, m_pPlayerState->m_PlayerNumber);
+		auto accLabelkv = opentelemetry::common::KeyValueIterableView<decltype(accLabels)>{accLabels};
+
+		const int curPossible = m_pPlayerStageStats->m_iCurPossibleDancePoints;
+		const int actual = m_pPlayerStageStats->m_iActualDancePoints;
+		int64_t accuracyBps = 0;
+		if (curPossible > 0)
+			accuracyBps = (static_cast<int64_t>(actual) * 10000) / curPossible;
+
+		if (auto accGauge = METRICS->GetAccuracyGauge())
+			accGauge->Record(accuracyBps, accLabelkv, context);
+		if (auto actGauge = METRICS->GetDancePointsActualGauge())
+			actGauge->Record(static_cast<int64_t>(actual), accLabelkv, context);
+		if (auto posGauge = METRICS->GetDancePointsPossibleGauge())
+			posGauge->Record(static_cast<int64_t>(curPossible), accLabelkv, context);
+	}
 	span->End();
 }
 
@@ -683,7 +699,7 @@ void ScoreKeeperNormal::HandleTapRowScore( const NoteData &nd, int iRow )
 		};
 		AddSongStepLabels(labels, m_pPlayerState->m_PlayerNumber);
 		auto labelkv = opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
-		auto context = opentelemetry::context::Context{};
+		auto context = opentelemetry::context::RuntimeContext::GetCurrent();
 		uint64_t offset_ms = static_cast<uint64_t>(offset * 1000.0f);
 		histogram->Record(offset_ms, labelkv, context);
 	}

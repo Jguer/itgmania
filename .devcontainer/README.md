@@ -1,6 +1,6 @@
 # ITGmania Development Container
 
-This directory contains configuration files for a development container based on Fedora 41, which provides a consistent development environment for building and testing ITGmania.
+This directory contains configuration files for a development container based on Fedora 43, which provides a consistent development environment for building and testing ITGmania.
 
 ## Requirements
 

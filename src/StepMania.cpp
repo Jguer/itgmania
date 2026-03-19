@@ -863,12 +863,16 @@ int sm_main(int argc, char* argv[])
 	METRICS = new MetricsProvider;
 
 	// Set up alternative filesystem trees.
-	MountFolders("dirro", PREFSMAN->m_sAdditionalFoldersReadOnly.Get(), "/");
-	MountFolders("dir", PREFSMAN->m_sAdditionalFoldersWritable.Get(), "/");
-	MountFolders("dirro", PREFSMAN->m_sAdditionalSongFoldersReadOnly.Get(), "/Songs");
-	MountFolders("dir", PREFSMAN->m_sAdditionalSongFoldersWritable.Get(), "/Songs");
-	MountFolders("dirro", PREFSMAN->m_sAdditionalCourseFoldersReadOnly.Get(), "/Courses");
-	MountFolders("dir", PREFSMAN->m_sAdditionalCourseFoldersWritable.Get(), "/Courses");
+	{
+		auto span = METRICS->GetTracer()->StartSpan("StepMania::MountFolders");
+		opentelemetry::trace::Scope scope(span);
+		MountFolders("dirro", PREFSMAN->m_sAdditionalFoldersReadOnly.Get(), "/");
+		MountFolders("dir", PREFSMAN->m_sAdditionalFoldersWritable.Get(), "/");
+		MountFolders("dirro", PREFSMAN->m_sAdditionalSongFoldersReadOnly.Get(), "/Songs");
+		MountFolders("dir", PREFSMAN->m_sAdditionalSongFoldersWritable.Get(), "/Songs");
+		MountFolders("dirro", PREFSMAN->m_sAdditionalCourseFoldersReadOnly.Get(), "/Courses");
+		MountFolders("dir", PREFSMAN->m_sAdditionalCourseFoldersWritable.Get(), "/Courses");
+	}
 
 	MountTreeOfZips( SpecialFiles::PACKAGES_DIR );
 
@@ -950,7 +954,11 @@ int sm_main(int argc, char* argv[])
 
 	// depends on SONGINDEX:
 	SONGMAN		= new SongManager;
-	SONGMAN->InitAll( pLoadingWindow, /*onlyAdditions=*/false );	// this takes a long time
+	{
+		auto span = METRICS->GetTracer()->StartSpan("StepMania::SongManager::InitAll");
+		opentelemetry::trace::Scope scope(span);
+		SONGMAN->InitAll( pLoadingWindow, /*onlyAdditions=*/false );	// this takes a long time
+	}
 	CRYPTMAN	= new CryptManager;		// need to do this before ProfileMan
 	if( PREFSMAN->m_bSignProfileData )
 		CRYPTMAN->GenerateGlobalKeys();
@@ -977,12 +985,20 @@ int sm_main(int argc, char* argv[])
 		return 0;
 	}
 
-	StartDisplay();
+	{
+		auto span = METRICS->GetTracer()->StartSpan("StepMania::StartDisplay");
+		opentelemetry::trace::Scope scope(span);
+		StartDisplay();
+	}
 
 	StoreActualGraphicOptions();
 	LOG->Info( "%s", GetActualGraphicOptionsString().c_str() );
 
-	SONGMAN->PreloadSongImages();
+	{
+		auto span = METRICS->GetTracer()->StartSpan("StepMania::SongManager::PreloadSongImages");
+		opentelemetry::trace::Scope scope(span);
+		SONGMAN->PreloadSongImages();
+	}
 
 	/* Input handlers can have dependences on the video system so
 	 * INPUTMAN must be initialized after DISPLAY. */
@@ -996,8 +1012,16 @@ int sm_main(int argc, char* argv[])
 
 	/* Now that GAMESTATE is reset, tell SCREENMAN to update the theme (load
 	 * overlay screens and global sounds), and load the initial screen. */
-	SCREENMAN->ThemeChanged();
-	SCREENMAN->SetNewScreen( StepMania::GetInitialScreen() );
+	{
+		auto span = METRICS->GetTracer()->StartSpan("StepMania::ScreenManager::ThemeChanged");
+		opentelemetry::trace::Scope scope(span);
+		SCREENMAN->ThemeChanged();
+	}
+	{
+		auto span = METRICS->GetTracer()->StartSpan("StepMania::ScreenManager::SetInitialScreen");
+		opentelemetry::trace::Scope scope(span);
+		SCREENMAN->SetNewScreen( StepMania::GetInitialScreen() );
+	}
 
 	// Do this after ThemeChanged so that we can show a system message
 	RString sMessage;

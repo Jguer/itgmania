@@ -342,6 +342,11 @@ public:
 	Preference<RString>	m_sOTLPMetricsURL;
 	Preference<RString>	m_sOTLPLogsURL;
 	Preference<RString>	m_sOTLPTracesURL;
+	Preference<bool>	m_bOTelEnabled;
+	Preference<bool>	m_bOTelMetricsEnabled;
+	Preference<bool>	m_bOTelLogsEnabled;
+	Preference<bool>	m_bOTelTracesEnabled;
+	Preference<float>	m_fOTelTraceSampleRate;
 
 	Preference<bool> m_custom_songs_enable;
 	Preference<unsigned int> m_custom_songs_max_count;

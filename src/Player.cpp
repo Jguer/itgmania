@@ -51,12 +51,7 @@ void TimingWindowSecondsInit( size_t /*TimingWindow*/ i, RString &sNameOut, floa
 
 // Duplicate of ScoreKeeperNormal.cpp - TO REFACTOR
 static void AddSongStepLabels(std::map<std::string, std::string>& labels, int playerNumber) {
-    Song* song = GAMESTATE->m_pCurSong;
     Steps* steps = GAMESTATE->m_pCurSteps[playerNumber];
-    if (song) {
-        labels["song_title"] = song->GetMainTitle();
-        labels["song_artist"] = song->GetDisplayArtist();
-    }
     if (steps) {
         labels["difficulty"] = DifficultyToString(steps->GetDifficulty());
         labels["meter"] = std::to_string(steps->GetMeter());
@@ -843,8 +838,6 @@ void Player::SendComboMessages( unsigned int iOldCombo, unsigned int iOldMissCom
 
 void Player::Update( float fDeltaTime )
 {
-	auto span = METRICS->GetTracer()->StartSpan("Player::Update");
-	opentelemetry::trace::Scope scope(span);
 	const RageTimer now;
 	// Don't update if we haven't been loaded yet.
 	if( !m_bLoaded )
@@ -1211,7 +1204,6 @@ void Player::Update( float fDeltaTime )
 	}
 	// process transforms that are waiting to be applied
 	ApplyWaitingTransforms();
-	span->End();
 }
 
 // Update a group of holds with shared scoring/life. All of these holds will have the same start row.
@@ -2709,8 +2701,6 @@ void Player::UpdateTapNotesMissedOlderThan( float fMissIfOlderThanSeconds )
 
 void Player::UpdateJudgedRows()
 {
-    auto span = METRICS->GetTracer()->StartSpan("Player::UpdateJudgedRows");
-	opentelemetry::trace::Scope scope(span);
 	// Look ahead far enough to catch any rows judged early.
 	const int iEndRow = BeatToNoteRow( m_Timing->GetBeatFromElapsedTime( m_pPlayerState->m_Position.m_fMusicSeconds + GetMaxStepDistanceSeconds() ) );
 	bool bAllJudged = true;
@@ -2722,9 +2712,6 @@ void Player::UpdateJudgedRows()
 		for( ; !iter.IsAtEnd()  &&  iter.Row() <= iEndRow; ++iter )
 		{
 			int iRow = iter.Row();
-			auto span = METRICS->GetTracer()->StartSpan("Player::UpdateJudgedRows::Row");
-			opentelemetry::trace::Scope scope(span);
-
 			// Do not judge arrows in WarpSegments or FakeSegments
 			if (!m_Timing->IsJudgableAtRow(iRow))
 				continue;
@@ -2764,7 +2751,6 @@ void Player::UpdateJudgedRows()
 				}
 				HandleTapRowScore( iRow );
 			}
-			span->End();
 		}
 	}
 
@@ -2861,7 +2847,6 @@ void Player::UpdateJudgedRows()
 			sound->Play(false);
 		}
 	}
-    span->End();
 }
 
 void Player::FlashGhostRow( int iRow )
@@ -3062,8 +3047,6 @@ void Player::CrossedRows( int iLastRowCrossed, const RageTimer &now )
 
 void Player::HandleTapRowScore( unsigned row )
 {
-	auto span = METRICS->GetTracer()->StartSpan("Player::HandleTapRowScore");
-	opentelemetry::trace::Scope scope(span);
 	bool bNoCheating = true;
 #ifdef DEBUG
 	bNoCheating = false;
@@ -3195,7 +3178,6 @@ void Player::HandleTapRowScore( unsigned row )
 	if (lastTap.result.earlyTns == TNS_None) {
 		ChangeLife( scoreOfLastTap );
 	}
-	span->End();
 }
 
 void Player::HandleHoldCheckpoint(int iRow,
