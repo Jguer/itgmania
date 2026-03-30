@@ -309,7 +309,7 @@ void GameLoop::RunGameLoop() {
     SCREENMAN->Draw();
 
     if (METRICS) {
-      if (auto* fpsGauge = METRICS->GetGauge("fpsGauge")) {
+      if (auto fpsGauge = METRICS->GetGauge("fpsGauge")) {
         fpsGauge->Record(DISPLAY->GetFPS());
       }
 
@@ -322,11 +322,11 @@ void GameLoop::RunGameLoop() {
           opentelemetry::common::KeyValueIterableView<decltype(labels)>{
               labels};
       auto context = opentelemetry::context::Context{};
-      if (auto* histogram = METRICS->GetFrameTimeHistogram()) {
+      if (auto histogram = METRICS->GetFrameTimeHistogram()) {
         histogram->Record(frameMs, labelkv, context);
       }
       if (frameMs > 33) {
-        if (auto* frameDropCounter = METRICS->GetFrameDropCounter()) {
+        if (auto frameDropCounter = METRICS->GetFrameDropCounter()) {
           frameDropCounter->Add(1, labelkv, context);
         }
       }
