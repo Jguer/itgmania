@@ -401,15 +401,15 @@ HttpRequestFuturePtr NetworkManager::HttpRequest(const HttpRequestArgs& args) {
                       std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::steady_clock::now() - requestStart)
                           .count());
-                  if (auto* duration = METRICS->GetHttpRequestDuration()) {
+                  if (auto duration = METRICS->GetHttpRequestDuration()) {
                     duration->Record(durationMs, labelkv, context);
                   }
-                  if (auto* counter = METRICS->GetHttpRequestCounter()) {
+                  if (auto counter = METRICS->GetHttpRequestCounter()) {
                     counter->Add(1, labelkv, context);
                   }
                   if (!parsedRequestUrl ||
                       response->errorCode != ix::HttpErrorCode::Ok) {
-                    if (auto* errorCounter =
+                    if (auto errorCounter =
                             METRICS->GetHttpRequestErrorCounter()) {
                       errorCounter->Add(1, labelkv, context);
                     }
@@ -453,14 +453,14 @@ WebSocketHandlePtr NetworkManager::WebSocket(const WebSocketArgs& args) {
                 std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - openStart)
                     .count());
-            if (auto* duration = METRICS->GetWebSocketOpenDuration()) {
+            if (auto duration = METRICS->GetWebSocketOpenDuration()) {
               duration->Record(durationMs, labelkv, context);
             }
-            if (auto* counter = METRICS->GetWebSocketOpenCounter()) {
+            if (auto counter = METRICS->GetWebSocketOpenCounter()) {
               counter->Add(1, labelkv, context);
             }
           } else if (msg->type == ix::WebSocketMessageType::Error) {
-            if (auto* errorCounter = METRICS->GetWebSocketErrorCounter()) {
+            if (auto errorCounter = METRICS->GetWebSocketErrorCounter()) {
               errorCounter->Add(1, labelkv, context);
             }
           }

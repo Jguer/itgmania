@@ -1969,7 +1969,7 @@ void Player::ChangeLifeRecord() {
           fLife, STATSMAN->m_CurStageStats.m_fStepsSeconds);
     }
     if (METRICS) {
-      if (auto* lifeGauge = METRICS->GetGauge("lifeGauge")) {
+      if (auto lifeGauge = METRICS->GetGauge("lifeGauge")) {
         std::map<std::string, std::string> labels = {
             {"player_number", std::to_string(pn)}};
         auto labelkv =
@@ -3257,7 +3257,7 @@ void Player::HandleTapRowScore(unsigned row) {
   if (m_pPlayerStageStats) {
     SetCombo(iCurCombo, iCurMissCombo);
     if (METRICS) {
-      if (auto* comboGauge = METRICS->GetGauge("comboGauge")) {
+      if (auto comboGauge = METRICS->GetGauge("comboGauge")) {
         std::map<std::string, std::string> labels = {
             {"player_number",
              std::to_string(m_pPlayerState->m_PlayerNumber)}};
@@ -3302,7 +3302,7 @@ void Player::HandleTapRowScore(unsigned row) {
     m_pPlayerStageStats->m_iMaxCombo =
         std::max(m_pPlayerStageStats->m_iMaxCombo, iCurCombo);
     if (METRICS) {
-      if (auto* maxComboGauge = METRICS->GetGauge("maxComboGauge")) {
+      if (auto maxComboGauge = METRICS->GetGauge("maxComboGauge")) {
         std::map<std::string, std::string> labels = {
             {"player_number",
              std::to_string(m_pPlayerState->m_PlayerNumber)}};

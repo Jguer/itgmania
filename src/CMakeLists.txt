@@ -514,9 +514,19 @@ list(APPEND SMDATA_LINK_LIB "opentelemetry_trace"
     "opentelemetry_exporter_otlp_grpc_metrics"
     "opentelemetry_otlp_recordable"
     "opentelemetry_resources"
-    "grpc++"
-    "protobuf"
     )
+
+if(TARGET gRPC::grpc++)
+  list(APPEND SMDATA_LINK_LIB gRPC::grpc++)
+else()
+  list(APPEND SMDATA_LINK_LIB "grpc++")
+endif()
+
+if(TARGET protobuf::libprotobuf)
+  list(APPEND SMDATA_LINK_LIB protobuf::libprotobuf)
+else()
+  list(APPEND SMDATA_LINK_LIB "protobuf")
+endif()
 
 list(APPEND SM_INCLUDE_DIRS "${OPENTELEMETRY_CPP_INCLUDE_DIRS}")
 
@@ -526,6 +536,10 @@ list(APPEND SM_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
             "${SM_GENERATED_SRC_DIR}")
 
 if(APPLE)
+  if(EXISTS "/opt/homebrew/lib")
+    target_link_directories("${SM_EXE_NAME}" PRIVATE "/opt/homebrew/lib")
+  endif()
+
   list(APPEND SM_INCLUDE_DIRS "archutils/Unix")
 
   add_dependencies("${SM_EXE_NAME}" "ffmpeg")
