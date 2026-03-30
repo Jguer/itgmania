@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,7 @@
 #include "LyricsLoader.h"
 #include "MemoryCardManager.h"
 #include "MessageManager.h"
+#include "MetricsProvider.h"
 #include "ModsGroup.h"
 #include "NoteData.h"
 #include "NoteDataUtil.h"
@@ -2844,6 +2846,83 @@ void ScreenGameplay::SongFinished() {
       pi->m_pActiveAttackList->Refresh();
 }
 
+namespace {
+static void AddGameplayHistLabels(
+    std::map<std::string, std::string>& labels, PlayerNumber pn) {
+  labels["player_number"] = std::to_string(pn);
+  Steps* pSteps = GAMESTATE->m_pCurSteps[pn];
+  if (pSteps) {
+    labels["difficulty"] = DifficultyToString(pSteps->GetDifficulty());
+    labels["meter"] = std::to_string(pSteps->GetMeter());
+  }
+  const Style* pStyle = GAMESTATE->GetCurrentStyle(pn);
+  if (pStyle) {
+    labels["steps_type"] = StepsTypeToString(pStyle->m_StepsType);
+  }
+}
+
+static void EmitSongPlayOpenTelemetry(PlayerNumber pn) {
+  if (!METRICS) {
+    return;
+  }
+
+  const PlayerStageStats& pss = STATSMAN->m_CurStageStats.m_player[pn];
+  std::map<std::string, std::string> labels;
+  AddGameplayHistLabels(labels, pn);
+  auto labelkv =
+      opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+  auto traceCtx = opentelemetry::context::RuntimeContext::GetCurrent();
+
+  const float pctDp = pss.GetPercentDancePoints();
+  const uint64_t finalAccuracyBps = static_cast<uint64_t>(
+      std::lround(std::clamp(pctDp, 0.f, 1.f) * 10000.f));
+  const uint64_t finalScore = static_cast<uint64_t>(pss.m_iScore);
+  const uint64_t maxCombo =
+      static_cast<uint64_t>(std::max(0, pss.GetMaxCombo().m_cnt));
+  const uint64_t durationMs = static_cast<uint64_t>(std::max(
+      0.0, static_cast<double>(STATSMAN->m_CurStageStats.m_fGameplaySeconds) *
+               1000.0));
+  const uint64_t lifePct = static_cast<uint64_t>(
+      std::lround(std::clamp(pss.GetCurrentLife(), 0.f, 1.f) * 100.f));
+
+  if (auto histogram = METRICS->GetSongFinalAccuracyBpsHistogram()) {
+    histogram->Record(finalAccuracyBps, labelkv, traceCtx);
+  }
+  if (auto histogram = METRICS->GetSongFinalScoreHistogram()) {
+    histogram->Record(finalScore, labelkv, traceCtx);
+  }
+  if (auto histogram = METRICS->GetSongMaxComboHistogram()) {
+    histogram->Record(maxCombo, labelkv, traceCtx);
+  }
+  if (auto histogram = METRICS->GetSongPlayDurationMsHistogram()) {
+    histogram->Record(durationMs, labelkv, traceCtx);
+  }
+  if (auto histogram = METRICS->GetSongFinalLifePercentHistogram()) {
+    histogram->Record(lifePct, labelkv, traceCtx);
+  }
+  if (auto counter = METRICS->GetSongPlaysCounter()) {
+    counter->Add(1, labelkv, traceCtx);
+  }
+
+  if (auto tracer = METRICS->GetTracer()) {
+    auto playSpan = tracer->StartSpan("song_play");
+    opentelemetry::trace::Scope scope(playSpan);
+    playSpan->SetAttribute("player.number", static_cast<int64_t>(pn));
+    playSpan->SetAttribute("gameplay.duration_seconds",
+                           static_cast<double>(
+                               STATSMAN->m_CurStageStats.m_fGameplaySeconds));
+    playSpan->SetAttribute("result.score", static_cast<int64_t>(pss.m_iScore));
+    playSpan->SetAttribute("result.percent_dp",
+                           static_cast<double>(pss.GetPercentDancePoints()));
+    playSpan->SetAttribute("result.max_combo",
+                           static_cast<int64_t>(pss.GetMaxCombo().m_cnt));
+    playSpan->SetAttribute("result.failed", pss.m_bFailed);
+    playSpan->SetAttribute("result.disqualified", pss.IsDisqualified());
+    playSpan->End();
+  }
+}
+}  // namespace
+
 void ScreenGameplay::StageFinished(bool bBackedOut) {
   if (GAMESTATE->IsCourseMode() && GAMESTATE->m_PlayMode != PLAY_MODE_ENDLESS) {
     LOG->Trace(
@@ -2874,6 +2953,8 @@ void ScreenGameplay::StageFinished(bool bBackedOut) {
       pn, STATSMAN->m_CurStageStats.m_bGaveUp,
       STATSMAN->m_CurStageStats.m_bUsedAutoplay);
   STATSMAN->m_CurStageStats.FinalizeScores(false);
+
+  FOREACH_HumanPlayer(pn) { EmitSongPlayOpenTelemetry(pn); }
 
   GAMESTATE->CommitStageStats();
 

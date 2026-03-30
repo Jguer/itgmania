@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <climits>
 #include <cstddef>
+#include <chrono>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -19,6 +21,7 @@
 
 #include "EnumHelper.h"
 #include "LuaManager.h"
+#include "MetricsProvider.h"
 #include "Preference.h"
 #include "ProductInfo.h"
 #include "RageFile.h"
@@ -296,6 +299,14 @@ HttpRequestFuturePtr NetworkManager::HttpRequest(const HttpRequestArgs& args) {
   auto& client = useDownloadClient ? this->downloadClient : this->httpClient;
   auto downloadFile = std::make_shared<RageFile>();
   std::string downloadFilename;
+  const auto requestStart = std::chrono::steady_clock::now();
+  std::string protocol;
+  std::string host;
+  std::string path;
+  std::string query;
+  int port = 0;
+  const bool parsedRequestUrl =
+      ix::UrlParser::parse(args.url, protocol, host, path, query, port);
 
   ix::HttpRequestArgsPtr req = client.createRequest(args.url, args.method);
   req->body = args.body;
@@ -339,7 +350,8 @@ HttpRequestFuturePtr NetworkManager::HttpRequest(const HttpRequestArgs& args) {
   {
     std::lock_guard<std::mutex> lock(this->httpWorkerMutex);
     this->httpWorkerQueue.push(
-        [this, useDownloadClient, req, args, downloadFile, downloadFilename]() {
+        [this, useDownloadClient, req, args, downloadFile, downloadFilename,
+         requestStart, parsedRequestUrl, host]() {
           if (this->shutdownWorkers.load()) {
             return;
           }
@@ -349,7 +361,8 @@ HttpRequestFuturePtr NetworkManager::HttpRequest(const HttpRequestArgs& args) {
 
           workerClient.performRequest(
               req, [args, downloadFile,
-                    downloadFilename](const ix::HttpResponsePtr& response) {
+                    downloadFilename, requestStart, parsedRequestUrl,
+                    host](const ix::HttpResponsePtr& response) {
                 if (!args.downloadFile.empty()) {
                   std::string error = downloadFile->GetError();
                   downloadFile->Close();
@@ -370,6 +383,38 @@ HttpRequestFuturePtr NetworkManager::HttpRequest(const HttpRequestArgs& args) {
                 if (args.onResponse) {
                   args.onResponse(response);
                 }
+
+                if (METRICS && response) {
+                  std::map<std::string, std::string> labels = {
+                      {"operation", "http_request"},
+                      {"method", args.method},
+                      {"host", parsedRequestUrl ? host : "unknown"},
+                      {"result",
+                       response->errorCode == ix::HttpErrorCode::Ok ? "success"
+                                                                    : "error"},
+                      {"status_code", std::to_string(response->statusCode)}};
+                  auto labelkv =
+                      opentelemetry::common::KeyValueIterableView<
+                          decltype(labels)>{labels};
+                  auto context = opentelemetry::context::Context{};
+                  const auto durationMs = static_cast<uint64_t>(
+                      std::chrono::duration_cast<std::chrono::milliseconds>(
+                          std::chrono::steady_clock::now() - requestStart)
+                          .count());
+                  if (auto* duration = METRICS->GetHttpRequestDuration()) {
+                    duration->Record(durationMs, labelkv, context);
+                  }
+                  if (auto* counter = METRICS->GetHttpRequestCounter()) {
+                    counter->Add(1, labelkv, context);
+                  }
+                  if (!parsedRequestUrl ||
+                      response->errorCode != ix::HttpErrorCode::Ok) {
+                    if (auto* errorCounter =
+                            METRICS->GetHttpRequestErrorCounter()) {
+                      errorCounter->Add(1, labelkv, context);
+                    }
+                  }
+                }
               });
         });
   }
@@ -382,11 +427,45 @@ HttpRequestFuturePtr NetworkManager::HttpRequest(const HttpRequestArgs& args) {
 WebSocketHandlePtr NetworkManager::WebSocket(const WebSocketArgs& args) {
   auto handle = std::make_shared<WebSocketHandle>();
   handle->onClose = args.onClose;
+  const auto openStart = std::chrono::steady_clock::now();
+  std::string wsProtocol;
+  std::string wsHost;
+  std::string wsPath;
+  std::string wsQuery;
+  int wsPort = 0;
+  const bool parsedWebSocketUrl = ix::UrlParser::parse(
+      args.url, wsProtocol, wsHost, wsPath, wsQuery, wsPort);
 
   handle->webSocket.setUrl(args.url);
   handle->webSocket.setTLSOptions(this->tlsOptions);
   handle->webSocket.setOnMessageCallback(
-      [onMessage = args.onMessage](const ix::WebSocketMessagePtr& msg) {
+      [onMessage = args.onMessage, openStart, parsedWebSocketUrl,
+       wsHost](const ix::WebSocketMessagePtr& msg) {
+        if (METRICS) {
+          std::map<std::string, std::string> labels = {
+              {"host", parsedWebSocketUrl ? wsHost : "unknown"}};
+          auto labelkv =
+              opentelemetry::common::KeyValueIterableView<decltype(labels)>{
+                  labels};
+          auto context = opentelemetry::context::Context{};
+          if (msg->type == ix::WebSocketMessageType::Open) {
+            const auto durationMs = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - openStart)
+                    .count());
+            if (auto* duration = METRICS->GetWebSocketOpenDuration()) {
+              duration->Record(durationMs, labelkv, context);
+            }
+            if (auto* counter = METRICS->GetWebSocketOpenCounter()) {
+              counter->Add(1, labelkv, context);
+            }
+          } else if (msg->type == ix::WebSocketMessageType::Error) {
+            if (auto* errorCounter = METRICS->GetWebSocketErrorCounter()) {
+              errorCounter->Add(1, labelkv, context);
+            }
+          }
+        }
+
         if (onMessage) {
           onMessage(*msg);
         }

@@ -31,6 +31,24 @@ runs:
         fi
       shell: bash
 
+    - name: Install OpenTelemetry dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: sudo apt-get install -y curl libcurl4-openssl-dev libabsl-dev libgrpc-dev libgrpc++-dev protobuf-compiler protobuf-compiler-grpc
+      shell: bash
+
+    - name: Install OpenTelemetry dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: brew install curl abseil grpc protobuf protobuf-c pkg-config
+      shell: bash
+
+    - name: Install OpenTelemetry dependencies (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        git clone https://github.com/microsoft/vcpkg.git
+        .\vcpkg\bootstrap-vcpkg.bat
+        .\vcpkg\vcpkg.exe install curl:x64-windows abseil:x64-windows protobuf:x64-windows grpc:x64-windows
+      shell: pwsh
+
     - name: Install Windows dependencies
       if: runner.os == 'Windows'
       run: |
@@ -91,4 +109,21 @@ runs:
       run: |
         echo "CMAKE_BUILD_FLAGS=--parallel $env:NUMBER_OF_PROCESSORS" >> $env:GITHUB_ENV
         echo "ARTIFACT_PATH=build/ITGmania-*.exe" >> $env:GITHUB_ENV
+      shell: pwsh
+
+    # OpenTelemetry needs a few extra CMake flags on top of the per-OS defaults
+    # set above. These append, so they must stay after those steps.
+    - name: Set OpenTelemetry CMake flags (Linux ARM)
+      if: inputs.os == 'ubuntu-24.04-arm'
+      run: echo "CMAKE_FLAGS=$CMAKE_FLAGS -DWITH_MINIMAID=OFF" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Set OpenTelemetry CMake flags (macOS)
+      if: runner.os == 'macOS'
+      run: echo "CMAKE_FLAGS=$CMAKE_FLAGS -DCMAKE_PREFIX_PATH=$(brew --prefix)" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Set OpenTelemetry CMake flags (Windows)
+      if: runner.os == 'Windows'
+      run: echo "CMAKE_FLAGS=$env:CMAKE_FLAGS -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake" >> $env:GITHUB_ENV
       shell: pwsh

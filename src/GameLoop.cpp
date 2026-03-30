@@ -1,6 +1,8 @@
 #include "GameLoop.h"
 
 #include <cmath>
+#include <chrono>
+#include <map>
 #include <string>
 
 #include "GameSoundManager.h"
@@ -10,6 +12,7 @@
 #include "LightsManager.h"
 #include "LuaManager.h"
 #include "MemoryCardManager.h"
+#include "MetricsProvider.h"
 #include "NetworkManager.h"
 #include "PeriodicCaller.h"
 #include "Preference.h"
@@ -283,6 +286,8 @@ void GameLoop::RunGameLoop() {
   }
 
   while (!ArchHooks::UserQuit()) {
+    const auto frameStart = std::chrono::steady_clock::now();
+
     if (!g_NewGame.empty()) {
       DoChangeGame();
     }
@@ -302,6 +307,30 @@ void GameLoop::RunGameLoop() {
     CallEveryNFrames(500, CheckInputDevices);
 
     SCREENMAN->Draw();
+
+    if (METRICS) {
+      if (auto* fpsGauge = METRICS->GetGauge("fpsGauge")) {
+        fpsGauge->Record(DISPLAY->GetFPS());
+      }
+
+      const auto frameMs = static_cast<uint64_t>(
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::steady_clock::now() - frameStart)
+              .count());
+      std::map<std::string, std::string> labels = {{"phase", "run_loop"}};
+      auto labelkv =
+          opentelemetry::common::KeyValueIterableView<decltype(labels)>{
+              labels};
+      auto context = opentelemetry::context::Context{};
+      if (auto* histogram = METRICS->GetFrameTimeHistogram()) {
+        histogram->Record(frameMs, labelkv, context);
+      }
+      if (frameMs > 33) {
+        if (auto* frameDropCounter = METRICS->GetFrameDropCounter()) {
+          frameDropCounter->Add(1, labelkv, context);
+        }
+      }
+    }
   }
 
   // If we ended mid-game, finish up.
