@@ -351,6 +351,15 @@ class PrefsManager {
    * StepMania. */
   Preference<bool> m_bQuirksMode;
 
+  Preference<std::string> m_sOTLPMetricsURL;
+  Preference<std::string> m_sOTLPLogsURL;
+  Preference<std::string> m_sOTLPTracesURL;
+  Preference<bool> m_bOTelEnabled;
+  Preference<bool> m_bOTelMetricsEnabled;
+  Preference<bool> m_bOTelLogsEnabled;
+  Preference<bool> m_bOTelTracesEnabled;
+  Preference<float> m_fOTelTraceSampleRate;
+
   Preference<bool> m_custom_songs_enable;
   Preference<unsigned int> m_custom_songs_max_count;
   Preference<float> m_custom_songs_load_timeout;

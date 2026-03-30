@@ -77,6 +77,19 @@ ITGmania can be compiled using [CMake](http://www.cmake.org/). More information 
 * [Lua for ITGmania](https://quietly-turning.github.io/Lua-For-SM5/LuaAPI?engine=ITGmania)
 * Lua API Documentation can be found in the Docs folder.
 
+## Operational observability defaults
+
+ITGmania ships with OpenTelemetry integration behind preferences. At runtime, set these in `Preferences.ini`:
+
+- `OTelEnabled` enables/disabled telemetry globally.
+- `OTelMetricsEnabled`, `OTelLogsEnabled`, `OTelTracesEnabled` control each signal independently.
+- `OTLPMetricsURL`, `OTLPLogsURL`, `OTLPTracesURL` define OTLP gRPC endpoints.
+- `OTelTraceSampleRate` accepts values from `0.0` (disabled) to `1.0` (full sampling).
+
+A matching collector (for example, OpenTelemetry Collector listening on `localhost:4317`) is recommended for local buffering and fan-out.
+
+For **Grafana LGTM** (Loki, Grafana, Tempo, Mimir): send OTLP metrics to Mimir, traces to Tempo, logs to Loki. Per-play histograms such as `itgmania_song_final_accuracy_bps`, `itgmania_song_final_score`, `itgmania_song_max_combo`, `itgmania_song_play_duration_ms`, and `itgmania_song_final_life_percent` use low-cardinality labels (`player_number`, `difficulty`, `meter`, `steps_type`) for guest-safe dashboards. **Metric exemplars** (trace-based) link histogram and counter samples to active spans when traces are enabled—use Mimir’s exemplar support with Tempo for drill-down from timing or score distributions into `song_play` traces.
+
 ## Licensing Terms
 
 ITGmania, as well as the [Simply Love](https://github.com/Simply-Love/Simply-Love-SM5) theme, are both under the GPLv3 license, or at your option, any later version.

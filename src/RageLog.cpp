@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "RageFile.h"
+#include "MetricsProvider.h"
 #include "RageThreads.h"
 #include "RageTimer.h"
 #include "RageUtil.h"
@@ -339,6 +340,54 @@ void RageLog::Write(int where, const std::string& sLine) {
 
     if (m_bLogToDisk && g_fileLog->IsOpen()) {
       g_fileLog->PutLine(sStr);
+    }
+
+    if (METRICS != nullptr) {
+      auto logger = METRICS->GetLogger();
+      if (logger != nullptr) {
+        std::string sanitizedStr = sStr;
+        for (size_t j = 0; j < sanitizedStr.size();) {
+          const unsigned char c = sanitizedStr[j];
+          if (c < 0x80) {
+            ++j;
+          } else if ((c & 0xE0) == 0xC0) {
+            if (j + 1 >= sanitizedStr.size() ||
+                (sanitizedStr[j + 1] & 0xC0) != 0x80) {
+              sanitizedStr[j++] = '?';
+            } else {
+              j += 2;
+            }
+          } else if ((c & 0xF0) == 0xE0) {
+            if (j + 2 >= sanitizedStr.size() ||
+                (sanitizedStr[j + 1] & 0xC0) != 0x80 ||
+                (sanitizedStr[j + 2] & 0xC0) != 0x80) {
+              sanitizedStr[j++] = '?';
+            } else {
+              j += 3;
+            }
+          } else if ((c & 0xF8) == 0xF0) {
+            if (j + 3 >= sanitizedStr.size() ||
+                (sanitizedStr[j + 1] & 0xC0) != 0x80 ||
+                (sanitizedStr[j + 2] & 0xC0) != 0x80 ||
+                (sanitizedStr[j + 3] & 0xC0) != 0x80) {
+              sanitizedStr[j++] = '?';
+            } else {
+              j += 4;
+            }
+          } else {
+            sanitizedStr[j++] = '?';
+          }
+        }
+
+        auto stringView = opentelemetry::nostd::string_view(sanitizedStr);
+        if (where & WRITE_LOUD) {
+          logger->Warn(stringView);
+        } else if (where & WRITE_TO_INFO) {
+          logger->Info(stringView);
+        } else {
+          logger->Debug(stringView);
+        }
+      }
     }
   }
 

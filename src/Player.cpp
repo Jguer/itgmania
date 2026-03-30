@@ -4,6 +4,7 @@
 #include <climits>
 #include <cmath>
 #include <cstddef>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -27,6 +28,7 @@
 #include "LifeMeter.h"
 #include "LuaManager.h"
 #include "MessageManager.h"
+#include "MetricsProvider.h"
 #include "NoteDataUtil.h"
 #include "NoteDataWithScoring.h"
 #include "NoteField.h"
@@ -289,6 +291,15 @@ ThemeMetric<float> M_MOD_HIGH_CAP("Player", "MModHighCap");
 
 /** @brief Will battle modes have their steps mirrored or kept the same? */
 ThemeMetric<bool> BATTLE_RAVE_MIRROR("Player", "BattleRaveMirror");
+
+static void AddSongStepLabels(
+    std::map<std::string, std::string>& labels, PlayerNumber playerNumber) {
+  Steps* steps = GAMESTATE->m_pCurSteps[playerNumber];
+  if (steps) {
+    labels["difficulty"] = DifficultyToString(steps->GetDifficulty());
+    labels["meter"] = std::to_string(steps->GetMeter());
+  }
+}
 
 float Player::GetWindowSeconds(TimingWindow tw) {
   float fSecs = m_fTimingWindowSeconds[tw];
@@ -1957,6 +1968,18 @@ void Player::ChangeLifeRecord() {
       m_pPlayerStageStats->SetLifeRecordAt(
           fLife, STATSMAN->m_CurStageStats.m_fStepsSeconds);
     }
+    if (METRICS) {
+      if (auto* lifeGauge = METRICS->GetGauge("lifeGauge")) {
+        std::map<std::string, std::string> labels = {
+            {"player_number", std::to_string(pn)}};
+        auto labelkv =
+            opentelemetry::common::KeyValueIterableView<decltype(labels)>{
+                labels};
+        auto context = opentelemetry::context::Context{};
+        lifeGauge->Record(static_cast<int64_t>(fLife * 100.0f), labelkv,
+                          context);
+      }
+    }
   }
 }
 
@@ -3233,6 +3256,19 @@ void Player::HandleTapRowScore(unsigned row) {
 
   if (m_pPlayerStageStats) {
     SetCombo(iCurCombo, iCurMissCombo);
+    if (METRICS) {
+      if (auto* comboGauge = METRICS->GetGauge("comboGauge")) {
+        std::map<std::string, std::string> labels = {
+            {"player_number",
+             std::to_string(m_pPlayerState->m_PlayerNumber)}};
+        AddSongStepLabels(labels, m_pPlayerState->m_PlayerNumber);
+        auto labelkv =
+            opentelemetry::common::KeyValueIterableView<decltype(labels)>{
+                labels};
+        auto context = opentelemetry::context::Context{};
+        comboGauge->Record(static_cast<int64_t>(iCurCombo), labelkv, context);
+      }
+    }
   }
 
 #define CROSSED(x) (iOldCombo < x && iCurCombo >= x)
@@ -3265,6 +3301,20 @@ void Player::HandleTapRowScore(unsigned row) {
   if (m_pPlayerStageStats) {
     m_pPlayerStageStats->m_iMaxCombo =
         std::max(m_pPlayerStageStats->m_iMaxCombo, iCurCombo);
+    if (METRICS) {
+      if (auto* maxComboGauge = METRICS->GetGauge("maxComboGauge")) {
+        std::map<std::string, std::string> labels = {
+            {"player_number",
+             std::to_string(m_pPlayerState->m_PlayerNumber)}};
+        auto labelkv =
+            opentelemetry::common::KeyValueIterableView<decltype(labels)>{
+                labels};
+        auto context = opentelemetry::context::Context{};
+        maxComboGauge->Record(
+            static_cast<int64_t>(m_pPlayerStageStats->m_iMaxCombo), labelkv,
+            context);
+      }
+    }
   }
 
   /* Use the real current beat, not the beat we've been passed. That's because

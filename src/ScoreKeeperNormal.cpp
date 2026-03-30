@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,7 @@
 #include "GameState.h"
 #include "LuaManager.h"
 #include "MessageManager.h"
+#include "MetricsProvider.h"
 #include "NoteData.h"
 #include "NoteDataUtil.h"
 #include "NoteDataWithScoring.h"
@@ -47,6 +49,15 @@ static ThemeMetric1D<int> g_iPercentScoreWeight(
     "ScoreKeeperNormal", PercentScoreWeightName, NUM_ScoreEvent);
 static ThemeMetric1D<int> g_iGradeWeight(
     "ScoreKeeperNormal", GradeWeightName, NUM_ScoreEvent);
+
+static void AddSongStepLabels(
+    std::map<std::string, std::string>& labels, PlayerNumber playerNumber) {
+  Steps* steps = GAMESTATE->m_pCurSteps[playerNumber];
+  if (steps) {
+    labels["difficulty"] = DifficultyToString(steps->GetDifficulty());
+    labels["meter"] = std::to_string(steps->GetMeter());
+  }
+}
 
 ScoreKeeperNormal::ScoreKeeperNormal(
     PlayerState* pPlayerState, PlayerStageStats* pPlayerStageStats)
@@ -354,7 +365,19 @@ void ScoreKeeperNormal::AddScoreInternal(TapNoteScore score) {
     m_iScoreRemainder = (iScore % m_iRoundTo);
     iScore = iScore - m_iScoreRemainder;
 
-    // LOG->Trace( "score: %i", iScore );
+    if (METRICS) {
+      if (auto scoreGauge = METRICS->GetGauge("scoreGauge")) {
+        std::map<std::string, std::string> labels = {
+            {"player_number",
+             std::to_string(m_pPlayerState->m_PlayerNumber)}};
+        AddSongStepLabels(labels, m_pPlayerState->m_PlayerNumber);
+        auto labelkv =
+            opentelemetry::common::KeyValueIterableView<decltype(labels)>{
+                labels};
+        auto context = opentelemetry::context::Context{};
+        scoreGauge->Record(static_cast<int64_t>(iScore), labelkv, context);
+      }
+    }
   }
 }
 
@@ -449,6 +472,11 @@ void ScoreKeeperNormal::HandleTapNoteScoreInternal(
     m_pPlayerStageStats->m_iActualDancePoints += TapNoteScoreToDancePoints(tns);
   }
 
+  std::map<std::string, std::string> labels = {
+      {"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)},
+      {"tns", TapNoteScoreToLocalizedString(tns)}};
+  AddSongStepLabels(labels, m_pPlayerState->m_PlayerNumber);
+
   // update judged row totals. Respect Combo segments here.
   TimingData& td =
       *GAMESTATE->m_pCurSteps[m_pPlayerState->m_PlayerNumber]->GetTimingData();
@@ -461,9 +489,49 @@ void ScoreKeeperNormal::HandleTapNoteScoreInternal(
     m_pPlayerStageStats->m_iTapNoteScores[tns] += 1;
   }
 
+  if (METRICS) {
+    auto labelkv =
+        opentelemetry::common::KeyValueIterableView<decltype(labels)>{
+            labels};
+    auto context = opentelemetry::context::Context{};
+    if (auto hitGauge = METRICS->GetGauge("hitGauge")) {
+      hitGauge->Record(m_pPlayerStageStats->m_iTapNoteScores[tns], labelkv,
+                       context);
+    }
+    if (auto hitCounter = METRICS->GetCounter()) {
+      hitCounter->Add(1, labelkv, context);
+    }
+  }
+
   // increment the current total possible dance score
   m_pPlayerStageStats->m_iCurPossibleDancePoints +=
       TapNoteScoreToDancePoints(maximum);
+
+  if (METRICS) {
+    std::map<std::string, std::string> accuracyLabels = {
+        {"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)}};
+    AddSongStepLabels(accuracyLabels, m_pPlayerState->m_PlayerNumber);
+    auto labelkv =
+        opentelemetry::common::KeyValueIterableView<decltype(accuracyLabels)>{
+            accuracyLabels};
+    auto context = opentelemetry::context::Context{};
+    const int curPossible = m_pPlayerStageStats->m_iCurPossibleDancePoints;
+    const int actual = m_pPlayerStageStats->m_iActualDancePoints;
+    int64_t accuracyBps = 0;
+    if (curPossible > 0) {
+      accuracyBps = (static_cast<int64_t>(actual) * 10000) / curPossible;
+    }
+    if (auto accGauge = METRICS->GetAccuracyGauge()) {
+      accGauge->Record(accuracyBps, labelkv, context);
+    }
+    if (auto actualGauge = METRICS->GetDancePointsActualGauge()) {
+      actualGauge->Record(static_cast<int64_t>(actual), labelkv, context);
+    }
+    if (auto possibleGauge = METRICS->GetDancePointsPossibleGauge()) {
+      possibleGauge->Record(static_cast<int64_t>(curPossible), labelkv,
+                            context);
+    }
+  }
 }
 
 void ScoreKeeperNormal::HandleComboInternal(
@@ -618,6 +686,20 @@ void ScoreKeeperNormal::HandleTapRowScore(const NoteData& nd, int iRow) {
   PlayerNumber pn = m_pPlayerState->m_PlayerNumber;
   float offset = NoteDataWithScoring::LastTapNoteWithResult(nd, iRow)
                      .result.fTapNoteOffset;
+  if (METRICS) {
+    if (auto histogram = METRICS->GetHistogram()) {
+      std::map<std::string, std::string> labels = {
+          {"player_number", std::to_string(pn)}};
+      AddSongStepLabels(labels, pn);
+      auto labelkv =
+          opentelemetry::common::KeyValueIterableView<decltype(labels)>{
+              labels};
+      auto context = opentelemetry::context::RuntimeContext::GetCurrent();
+      const uint64_t offsetMs =
+          static_cast<uint64_t>(std::llround(std::abs(offset) * 1000.0f));
+      histogram->Record(offsetMs, labelkv, context);
+    }
+  }
   Message msg("ScoreChanged");
   msg.SetParam("PlayerNumber", m_pPlayerState->m_PlayerNumber);
   msg.SetParam("MultiPlayer", m_pPlayerState->m_mp);
