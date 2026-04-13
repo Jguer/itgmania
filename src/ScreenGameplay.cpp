@@ -44,6 +44,7 @@
 #include "MessageManager.h"
 #include "MetricsProvider.h"
 #include "ModsGroup.h"
+#include "opentelemetry/logs/log_record.h"
 #include "NoteData.h"
 #include "NoteDataUtil.h"
 #include "NoteDataWithScoring.h"
@@ -2867,6 +2868,7 @@ static void EmitSongPlayOpenTelemetry(PlayerNumber pn) {
   }
 
   const PlayerStageStats& pss = STATSMAN->m_CurStageStats.m_player[pn];
+  const Song* song = GAMESTATE->m_pCurSong;
   std::map<std::string, std::string> labels;
   AddGameplayHistLabels(labels, pn);
   auto labelkv =
@@ -2884,6 +2886,53 @@ static void EmitSongPlayOpenTelemetry(PlayerNumber pn) {
                1000.0));
   const uint64_t lifePct = static_cast<uint64_t>(
       std::lround(std::clamp(pss.GetCurrentLife(), 0.f, 1.f) * 100.f));
+  const double percentDp = static_cast<double>(pctDp);
+  const int64_t maxComboValue = static_cast<int64_t>(pss.GetMaxCombo().m_cnt);
+  const std::string songTitle =
+      song ? song->GetTranslitMainTitle() : std::string{};
+  const std::string songArtist =
+      song ? song->GetTranslitArtist() : std::string{};
+  const std::string songGroup = song ? song->m_sGroupName : std::string{};
+
+  const auto emitSongPlayLog =
+      [&](const opentelemetry::trace::SpanContext* spanContext) {
+        auto logger = METRICS->GetLogger();
+        if (logger == nullptr) {
+          return;
+        }
+
+        auto logRecord = logger->CreateLogRecord();
+        if (!logRecord) {
+          return;
+        }
+
+        logRecord->SetSeverity(opentelemetry::logs::Severity::kInfo);
+        logRecord->SetBody("song_play_completed");
+        if (spanContext != nullptr && spanContext->IsValid()) {
+          logRecord->SetTraceId(spanContext->trace_id());
+          logRecord->SetSpanId(spanContext->span_id());
+          logRecord->SetTraceFlags(spanContext->trace_flags());
+        }
+
+        for (const auto& label : labels) {
+          logRecord->SetAttribute(label.first.c_str(), label.second.c_str());
+        }
+        if (song != nullptr) {
+          logRecord->SetAttribute("song.title", songTitle.c_str());
+          logRecord->SetAttribute("song.artist", songArtist.c_str());
+          logRecord->SetAttribute("song.group", songGroup.c_str());
+        }
+        logRecord->SetAttribute("player.number", static_cast<int64_t>(pn));
+        logRecord->SetAttribute("gameplay.duration_seconds",
+                                static_cast<double>(
+                                    STATSMAN->m_CurStageStats.m_fGameplaySeconds));
+        logRecord->SetAttribute("result.score", static_cast<int64_t>(pss.m_iScore));
+        logRecord->SetAttribute("result.percent_dp", percentDp);
+        logRecord->SetAttribute("result.max_combo", maxComboValue);
+        logRecord->SetAttribute("result.failed", pss.m_bFailed);
+        logRecord->SetAttribute("result.disqualified", pss.IsDisqualified());
+        logger->EmitLogRecord(std::move(logRecord));
+      };
 
   if (auto histogram = METRICS->GetSongFinalAccuracyBpsHistogram()) {
     histogram->Record(finalAccuracyBps, labelkv, traceCtx);
@@ -2912,13 +2961,20 @@ static void EmitSongPlayOpenTelemetry(PlayerNumber pn) {
                            static_cast<double>(
                                STATSMAN->m_CurStageStats.m_fGameplaySeconds));
     playSpan->SetAttribute("result.score", static_cast<int64_t>(pss.m_iScore));
-    playSpan->SetAttribute("result.percent_dp",
-                           static_cast<double>(pss.GetPercentDancePoints()));
-    playSpan->SetAttribute("result.max_combo",
-                           static_cast<int64_t>(pss.GetMaxCombo().m_cnt));
+    playSpan->SetAttribute("result.percent_dp", percentDp);
+    playSpan->SetAttribute("result.max_combo", maxComboValue);
     playSpan->SetAttribute("result.failed", pss.m_bFailed);
     playSpan->SetAttribute("result.disqualified", pss.IsDisqualified());
+    if (song != nullptr) {
+      playSpan->SetAttribute("song.title", songTitle.c_str());
+      playSpan->SetAttribute("song.artist", songArtist.c_str());
+      playSpan->SetAttribute("song.group", songGroup.c_str());
+    }
+    const auto playSpanContext = playSpan->GetContext();
+    emitSongPlayLog(&playSpanContext);
     playSpan->End();
+  } else {
+    emitSongPlayLog(nullptr);
   }
 }
 }  // namespace

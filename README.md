@@ -88,7 +88,16 @@ ITGmania ships with OpenTelemetry integration behind preferences. At runtime, se
 
 A matching collector (for example, OpenTelemetry Collector listening on `localhost:4317`) is recommended for local buffering and fan-out.
 
-For **Grafana LGTM** (Loki, Grafana, Tempo, Mimir): send OTLP metrics to Mimir, traces to Tempo, logs to Loki. Per-play histograms such as `itgmania_song_final_accuracy_bps`, `itgmania_song_final_score`, `itgmania_song_max_combo`, `itgmania_song_play_duration_ms`, and `itgmania_song_final_life_percent` use low-cardinality labels (`player_number`, `difficulty`, `meter`, `steps_type`) for guest-safe dashboards. **Metric exemplars** (trace-based) link histogram and counter samples to active spans when traces are enabled—use Mimir’s exemplar support with Tempo for drill-down from timing or score distributions into `song_play` traces.
+For **Grafana LGTM** (Loki, Grafana, Tempo, Mimir): send OTLP metrics to Mimir, traces to Tempo, logs to Loki. Per-play histograms such as `itgmania_song_final_accuracy_bps`, `itgmania_song_final_score`, `itgmania_song_max_combo`, `itgmania_song_play_duration_ms`, and `itgmania_song_final_life_percent` use low-cardinality labels (`player_number`, `difficulty`, `meter`, `steps_type`) for guest-safe dashboards. Keep song identity out of metric labels to avoid high-cardinality time series.
+
+Completed plays also emit a `song_play` span with `song.title`, `song.artist`, `song.group`, `result.score`, `result.percent_dp`, `result.max_combo`, `result.failed`, and `result.disqualified` attributes, plus a matching `song_play_completed` log record carrying the same song/result fields for Loki tables. In Grafana, query Tempo with TraceQL for song-level tables, for example:
+
+```
+{ resource.service.name = "itgmania" && name = "song_play" }
+| select(span.song.title, span.song.artist, span.song.group, span.result.score, span.result.percent_dp, span.result.max_combo, span.result.failed)
+```
+
+**Metric exemplars** (trace-based) link histogram and counter samples to active spans when traces are enabled—use Mimir’s exemplar support with Tempo for drill-down from timing or score distributions into `song_play` traces.
 
 ## Licensing Terms
 
