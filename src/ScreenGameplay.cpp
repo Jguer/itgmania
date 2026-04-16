@@ -45,10 +45,12 @@
 #include "MetricsProvider.h"
 #include "ModsGroup.h"
 #include "opentelemetry/logs/log_record.h"
+#include "opentelemetry/trace/span.h"
 #include "NoteData.h"
 #include "NoteDataUtil.h"
 #include "NoteDataWithScoring.h"
 #include "NoteTypes.h"
+#include "OtelLabels.h"
 #include "Player.h"
 #include "PlayerAI.h"  // for NUM_SKILL_LEVELS
 #include "PlayerNumber.h"
@@ -395,6 +397,15 @@ ScreenGameplay::ScreenGameplay() {
   m_delaying_ready_announce = false;
   GAMESTATE->m_AdjustTokensBySongCostForFinalStageCheck = false;
 }
+
+// Forward declarations for OTEL helpers defined in the anonymous namespace
+// further down in this translation unit (so LoadNextSong and friends can
+// call them).
+namespace {
+void EmitCurrentSongInfoGauge();
+void StartSongPlaySpans();
+void EmitSongPlayOpenTelemetry(PlayerNumber pn);
+}  // namespace
 
 void ScreenGameplay::Init() {
   SubscribeToMessage("Judgment");
@@ -1515,6 +1526,10 @@ void ScreenGameplay::LoadNextSong() {
     }
     pi->m_SoundEffectControl.SetSoundReader(pPlayerSound);
   }
+
+  // Emit current-song OTEL signals once chart selection is finalized.
+  EmitCurrentSongInfoGauge();
+  StartSongPlaySpans();
 
   MESSAGEMAN->Broadcast("DoneLoadingNextSong");
 }
@@ -2848,21 +2863,150 @@ void ScreenGameplay::SongFinished() {
 }
 
 namespace {
+
+// Per-player storage for the long-lived `song_play` span. Started in
+// LoadNextSong (once a song + chart are known) and ended in
+// EmitSongPlayOpenTelemetry, so each completed play is exactly one trace.
+// Kept at file scope to avoid adding opentelemetry span types to
+// ScreenGameplay.h.
+opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::trace::Span>
+    g_songPlaySpans[NUM_PLAYERS];
+
+// Identity labels shared by every end-of-song metric/log record.
 static void AddGameplayHistLabels(
     std::map<std::string, std::string>& labels, PlayerNumber pn) {
-  labels["player_number"] = std::to_string(pn);
-  Steps* pSteps = GAMESTATE->m_pCurSteps[pn];
-  if (pSteps) {
-    labels["difficulty"] = DifficultyToString(pSteps->GetDifficulty());
-    labels["meter"] = std::to_string(pSteps->GetMeter());
+  otel_labels::FillGameplay(labels, pn);
+}
+
+// Emit the `itgmania_current_song_info` gauge (value = 1) carrying rich song /
+// chart metadata so dashboards can resolve the currently-playing title via
+// label_values and join on song_title elsewhere.
+void EmitCurrentSongInfoGauge() {
+  if (!METRICS) {
+    return;
   }
-  const Style* pStyle = GAMESTATE->GetCurrentStyle(pn);
-  if (pStyle) {
-    labels["steps_type"] = StepsTypeToString(pStyle->m_StepsType);
+  const Song* song = GAMESTATE ? GAMESTATE->m_pCurSong : nullptr;
+  if (song == nullptr) {
+    return;
+  }
+  auto infoGauge = METRICS->GetCurrentSongInfoGauge();
+  if (!infoGauge) {
+    return;
+  }
+  DisplayBpms bpms;
+  song->GetDisplayBpms(bpms);
+
+  FOREACH_HumanPlayer(pn) {
+    std::map<std::string, std::string> labels;
+    otel_labels::FillGameplay(labels, pn);
+    labels["song_artist"] = song->GetTranslitArtist();
+    labels["song_length_seconds"] =
+        std::to_string(static_cast<int>(song->m_fMusicLengthSeconds));
+    labels["bpm_min"] = std::to_string(static_cast<int>(bpms.GetMin()));
+    labels["bpm_max"] = std::to_string(static_cast<int>(bpms.GetMax()));
+    if (Steps* steps = GAMESTATE->m_pCurSteps[pn]) {
+      labels["chart_credit"] = steps->GetCredit();
+    }
+    auto labelkv =
+        opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+    auto context = opentelemetry::context::Context{};
+    infoGauge->Record(1, labelkv, context);
   }
 }
 
-static void EmitSongPlayOpenTelemetry(PlayerNumber pn) {
+// Start a long-lived `song_play` span for each enabled human player. Called
+// from LoadNextSong after GAMESTATE->m_pCurSong / m_pCurSteps are set.
+void StartSongPlaySpans() {
+  if (!METRICS) {
+    return;
+  }
+  auto tracer = METRICS->GetTracer();
+  if (!tracer) {
+    return;
+  }
+  const Song* song = GAMESTATE ? GAMESTATE->m_pCurSong : nullptr;
+  FOREACH_HumanPlayer(pn) {
+    // If a previous span is still open (e.g. player quit mid-course without
+    // reaching StageFinished), close it so we don't leak an unterminated span.
+    if (g_songPlaySpans[pn]) {
+      g_songPlaySpans[pn]->End();
+      g_songPlaySpans[pn] = {};
+      otel_labels::SetCurrentPlaySpan(pn, {});
+    }
+
+    auto span = tracer->StartSpan("song_play");
+    span->SetAttribute("player.number", static_cast<int64_t>(pn));
+    if (song != nullptr) {
+      span->SetAttribute("song.title", song->GetTranslitMainTitle().c_str());
+      span->SetAttribute("song.artist", song->GetTranslitArtist().c_str());
+      span->SetAttribute("song.group", song->m_sGroupName.c_str());
+      span->SetAttribute(
+          "song.length_seconds",
+          static_cast<double>(song->m_fMusicLengthSeconds));
+      DisplayBpms bpms;
+      song->GetDisplayBpms(bpms);
+      span->SetAttribute(
+          "song.bpm_min", static_cast<double>(bpms.GetMin()));
+      span->SetAttribute(
+          "song.bpm_max", static_cast<double>(bpms.GetMax()));
+    }
+    if (Steps* steps = GAMESTATE->m_pCurSteps[pn]) {
+      span->SetAttribute(
+          "chart.difficulty",
+          DifficultyToString(steps->GetDifficulty()).c_str());
+      span->SetAttribute(
+          "chart.meter", static_cast<int64_t>(steps->GetMeter()));
+      span->SetAttribute("chart.credit", steps->GetCredit().c_str());
+      const RadarValues& rv = steps->GetRadarValues(pn);
+      span->SetAttribute(
+          "chart.radar.stream",
+          static_cast<double>(rv[RadarCategory_Stream]));
+      span->SetAttribute(
+          "chart.radar.voltage",
+          static_cast<double>(rv[RadarCategory_Voltage]));
+      span->SetAttribute(
+          "chart.radar.air",
+          static_cast<double>(rv[RadarCategory_Air]));
+      span->SetAttribute(
+          "chart.radar.freeze",
+          static_cast<double>(rv[RadarCategory_Freeze]));
+      span->SetAttribute(
+          "chart.radar.chaos",
+          static_cast<double>(rv[RadarCategory_Chaos]));
+      span->SetAttribute(
+          "chart.radar.taps_holds",
+          static_cast<double>(rv[RadarCategory_TapsAndHolds]));
+      span->SetAttribute(
+          "chart.radar.jumps",
+          static_cast<double>(rv[RadarCategory_Jumps]));
+      span->SetAttribute(
+          "chart.radar.holds",
+          static_cast<double>(rv[RadarCategory_Holds]));
+      span->SetAttribute(
+          "chart.radar.mines",
+          static_cast<double>(rv[RadarCategory_Mines]));
+      span->SetAttribute(
+          "chart.radar.rolls",
+          static_cast<double>(rv[RadarCategory_Rolls]));
+    }
+    if (const Style* style = GAMESTATE->GetCurrentStyle(pn)) {
+      span->SetAttribute(
+          "chart.steps_type",
+          StepsTypeToString(style->m_StepsType).c_str());
+    }
+    span->SetAttribute(
+        "stage.index",
+        static_cast<int64_t>(GAMESTATE->GetCourseSongIndex()));
+    span->AddEvent("gameplay.start");
+    g_songPlaySpans[pn] = span;
+    otel_labels::SetCurrentPlaySpan(pn, span);
+  }
+}
+
+// Finalize and end the per-player `song_play` span at stage end, attaching
+// final results, per-judgment tap counts, hold outcomes, and a structured log
+// record cross-linked to the span via trace/span IDs.
+void EmitSongPlayOpenTelemetry(PlayerNumber pn) {
   if (!METRICS) {
     return;
   }
@@ -2894,6 +3038,60 @@ static void EmitSongPlayOpenTelemetry(PlayerNumber pn) {
       song ? song->GetTranslitArtist() : std::string{};
   const std::string songGroup = song ? song->m_sGroupName : std::string{};
 
+  // Attach final attributes + events to the long-lived span that bracketed
+  // actual gameplay, then end it (so total duration reflects play duration).
+  auto playSpan = g_songPlaySpans[pn];
+  if (playSpan) {
+    playSpan->AddEvent("gameplay.end");
+    playSpan->SetAttribute(
+        "gameplay.duration_seconds",
+        static_cast<double>(STATSMAN->m_CurStageStats.m_fGameplaySeconds));
+    playSpan->SetAttribute(
+        "result.score", static_cast<int64_t>(pss.m_iScore));
+    playSpan->SetAttribute("result.percent_dp", percentDp);
+    playSpan->SetAttribute("result.max_combo", maxComboValue);
+    playSpan->SetAttribute("result.failed", pss.m_bFailed);
+    playSpan->SetAttribute("result.disqualified", pss.IsDisqualified());
+    playSpan->SetAttribute(
+        "result.life_percent", static_cast<int64_t>(lifePct));
+    playSpan->SetAttribute(
+        "result.judgments.w1",
+        static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W1]));
+    playSpan->SetAttribute(
+        "result.judgments.w2",
+        static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W2]));
+    playSpan->SetAttribute(
+        "result.judgments.w3",
+        static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W3]));
+    playSpan->SetAttribute(
+        "result.judgments.w4",
+        static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W4]));
+    playSpan->SetAttribute(
+        "result.judgments.w5",
+        static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W5]));
+    playSpan->SetAttribute(
+        "result.judgments.miss",
+        static_cast<int64_t>(pss.m_iTapNoteScores[TNS_Miss]));
+    playSpan->SetAttribute(
+        "result.judgments.mine_hit",
+        static_cast<int64_t>(pss.m_iTapNoteScores[TNS_HitMine]));
+    playSpan->SetAttribute(
+        "result.judgments.mine_avoided",
+        static_cast<int64_t>(pss.m_iTapNoteScores[TNS_AvoidMine]));
+    playSpan->SetAttribute(
+        "result.holds.held",
+        static_cast<int64_t>(pss.m_iHoldNoteScores[HNS_Held]));
+    playSpan->SetAttribute(
+        "result.holds.let_go",
+        static_cast<int64_t>(pss.m_iHoldNoteScores[HNS_LetGo]));
+    playSpan->SetAttribute(
+        "result.holds.missed",
+        static_cast<int64_t>(pss.m_iHoldNoteScores[HNS_Missed]));
+    if (pss.m_bFailed) {
+      playSpan->AddEvent("failed");
+    }
+  }
+
   const auto emitSongPlayLog =
       [&](const opentelemetry::trace::SpanContext* spanContext) {
         auto logger = METRICS->GetLogger();
@@ -2923,56 +3121,116 @@ static void EmitSongPlayOpenTelemetry(PlayerNumber pn) {
           logRecord->SetAttribute("song.group", songGroup.c_str());
         }
         logRecord->SetAttribute("player.number", static_cast<int64_t>(pn));
-        logRecord->SetAttribute("gameplay.duration_seconds",
-                                static_cast<double>(
-                                    STATSMAN->m_CurStageStats.m_fGameplaySeconds));
-        logRecord->SetAttribute("result.score", static_cast<int64_t>(pss.m_iScore));
+        logRecord->SetAttribute(
+            "gameplay.duration_seconds",
+            static_cast<double>(
+                STATSMAN->m_CurStageStats.m_fGameplaySeconds));
+        logRecord->SetAttribute(
+            "result.score", static_cast<int64_t>(pss.m_iScore));
         logRecord->SetAttribute("result.percent_dp", percentDp);
         logRecord->SetAttribute("result.max_combo", maxComboValue);
         logRecord->SetAttribute("result.failed", pss.m_bFailed);
         logRecord->SetAttribute("result.disqualified", pss.IsDisqualified());
+        logRecord->SetAttribute(
+            "result.life_percent", static_cast<int64_t>(lifePct));
+        logRecord->SetAttribute(
+            "result.judgments.w1",
+            static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W1]));
+        logRecord->SetAttribute(
+            "result.judgments.w2",
+            static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W2]));
+        logRecord->SetAttribute(
+            "result.judgments.w3",
+            static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W3]));
+        logRecord->SetAttribute(
+            "result.judgments.w4",
+            static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W4]));
+        logRecord->SetAttribute(
+            "result.judgments.w5",
+            static_cast<int64_t>(pss.m_iTapNoteScores[TNS_W5]));
+        logRecord->SetAttribute(
+            "result.judgments.miss",
+            static_cast<int64_t>(pss.m_iTapNoteScores[TNS_Miss]));
+        logRecord->SetAttribute(
+            "result.judgments.mine_hit",
+            static_cast<int64_t>(pss.m_iTapNoteScores[TNS_HitMine]));
+        logRecord->SetAttribute(
+            "result.judgments.mine_avoided",
+            static_cast<int64_t>(pss.m_iTapNoteScores[TNS_AvoidMine]));
+        logRecord->SetAttribute(
+            "result.holds.held",
+            static_cast<int64_t>(pss.m_iHoldNoteScores[HNS_Held]));
+        logRecord->SetAttribute(
+            "result.holds.let_go",
+            static_cast<int64_t>(pss.m_iHoldNoteScores[HNS_LetGo]));
+        logRecord->SetAttribute(
+            "result.holds.missed",
+            static_cast<int64_t>(pss.m_iHoldNoteScores[HNS_Missed]));
         logger->EmitLogRecord(std::move(logRecord));
       };
 
-  if (auto histogram = METRICS->GetSongFinalAccuracyBpsHistogram()) {
-    histogram->Record(finalAccuracyBps, labelkv, traceCtx);
-  }
-  if (auto histogram = METRICS->GetSongFinalScoreHistogram()) {
-    histogram->Record(finalScore, labelkv, traceCtx);
-  }
-  if (auto histogram = METRICS->GetSongMaxComboHistogram()) {
-    histogram->Record(maxCombo, labelkv, traceCtx);
-  }
-  if (auto histogram = METRICS->GetSongPlayDurationMsHistogram()) {
-    histogram->Record(durationMs, labelkv, traceCtx);
-  }
-  if (auto histogram = METRICS->GetSongFinalLifePercentHistogram()) {
-    histogram->Record(lifePct, labelkv, traceCtx);
-  }
-  if (auto counter = METRICS->GetSongPlaysCounter()) {
-    counter->Add(1, labelkv, traceCtx);
+  // Record the end-of-play histograms *inside* the span's trace context so
+  // exemplars on each histogram sample link back to this span.
+  if (playSpan) {
+    opentelemetry::trace::Scope scope(playSpan);
+    auto scopedCtx = opentelemetry::context::RuntimeContext::GetCurrent();
+    if (auto histogram = METRICS->GetSongFinalAccuracyBpsHistogram()) {
+      histogram->Record(finalAccuracyBps, labelkv, scopedCtx);
+    }
+    if (auto histogram = METRICS->GetSongFinalScoreHistogram()) {
+      histogram->Record(finalScore, labelkv, scopedCtx);
+    }
+    if (auto histogram = METRICS->GetSongMaxComboHistogram()) {
+      histogram->Record(maxCombo, labelkv, scopedCtx);
+    }
+    if (auto histogram = METRICS->GetSongPlayDurationMsHistogram()) {
+      histogram->Record(durationMs, labelkv, scopedCtx);
+    }
+    if (auto histogram = METRICS->GetSongFinalLifePercentHistogram()) {
+      histogram->Record(lifePct, labelkv, scopedCtx);
+    }
+    if (auto counter = METRICS->GetSongPlaysCounter()) {
+      counter->Add(1, labelkv, scopedCtx);
+    }
+  } else {
+    if (auto histogram = METRICS->GetSongFinalAccuracyBpsHistogram()) {
+      histogram->Record(finalAccuracyBps, labelkv, traceCtx);
+    }
+    if (auto histogram = METRICS->GetSongFinalScoreHistogram()) {
+      histogram->Record(finalScore, labelkv, traceCtx);
+    }
+    if (auto histogram = METRICS->GetSongMaxComboHistogram()) {
+      histogram->Record(maxCombo, labelkv, traceCtx);
+    }
+    if (auto histogram = METRICS->GetSongPlayDurationMsHistogram()) {
+      histogram->Record(durationMs, labelkv, traceCtx);
+    }
+    if (auto histogram = METRICS->GetSongFinalLifePercentHistogram()) {
+      histogram->Record(lifePct, labelkv, traceCtx);
+    }
+    if (auto counter = METRICS->GetSongPlaysCounter()) {
+      counter->Add(1, labelkv, traceCtx);
+    }
   }
 
-  if (auto tracer = METRICS->GetTracer()) {
-    auto playSpan = tracer->StartSpan("song_play");
-    opentelemetry::trace::Scope scope(playSpan);
-    playSpan->SetAttribute("player.number", static_cast<int64_t>(pn));
-    playSpan->SetAttribute("gameplay.duration_seconds",
-                           static_cast<double>(
-                               STATSMAN->m_CurStageStats.m_fGameplaySeconds));
-    playSpan->SetAttribute("result.score", static_cast<int64_t>(pss.m_iScore));
-    playSpan->SetAttribute("result.percent_dp", percentDp);
-    playSpan->SetAttribute("result.max_combo", maxComboValue);
-    playSpan->SetAttribute("result.failed", pss.m_bFailed);
-    playSpan->SetAttribute("result.disqualified", pss.IsDisqualified());
-    if (song != nullptr) {
-      playSpan->SetAttribute("song.title", songTitle.c_str());
-      playSpan->SetAttribute("song.artist", songArtist.c_str());
-      playSpan->SetAttribute("song.group", songGroup.c_str());
-    }
+  // "Last value" gauges so Global Stats tabs can compute max_over_time()
+  // per range without relying on histogram reconstruction.
+  if (auto lastScore = METRICS->GetLastPlayScoreGauge()) {
+    auto context = opentelemetry::context::Context{};
+    lastScore->Record(
+        static_cast<int64_t>(pss.m_iScore), labelkv, context);
+  }
+  if (auto lastCombo = METRICS->GetLastPlayMaxComboGauge()) {
+    auto context = opentelemetry::context::Context{};
+    lastCombo->Record(maxComboValue, labelkv, context);
+  }
+
+  if (playSpan) {
     const auto playSpanContext = playSpan->GetContext();
     emitSongPlayLog(&playSpanContext);
     playSpan->End();
+    g_songPlaySpans[pn] = {};
+    otel_labels::SetCurrentPlaySpan(pn, {});
   } else {
     emitSongPlayLog(nullptr);
   }

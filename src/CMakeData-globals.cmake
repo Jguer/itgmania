@@ -2,6 +2,7 @@ list(APPEND SMDATA_GLOBAL_FILES_SRC
             "GameLoop.cpp"
             "global.cpp"
             "MetricsProvider.cpp"
+            "OtelLabels.cpp"
             "SpecialFiles.cpp"
             "StepMania.cpp" # TODO: Refactor into separate main project.
             "${SM_GENERATED_SRC_DIR}/verstub.cpp")
@@ -10,6 +11,7 @@ list(APPEND SMDATA_GLOBAL_FILES_HPP
             "GameLoop.h"
             "global.h"
             "MetricsProvider.h"
+            "OtelLabels.h"
             "PeriodicCaller.h"
             "ProductInfo.h" # TODO: Have this be auto-generated.
             "SpecialFiles.h"

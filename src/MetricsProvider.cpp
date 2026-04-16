@@ -239,6 +239,30 @@ MetricsProvider::MetricsProvider()
 		"itgmania_song_final_life_percent",
 		"Life gauge at end of play (0-100).",
 		"percent");
+	m_noteHitOffsetHistogram = meter->CreateDoubleHistogram(
+		"itgmania_note_hit_offset_ms",
+		"Signed note hit timing offset (negative = early, positive = late).",
+		"ms");
+	m_holdNoteScoresCounter = meter->CreateUInt64Counter(
+		"itgmania_hold_note_scores_total",
+		"Hold / Roll outcomes (held, let_go, missed).",
+		"count");
+	m_mineEventsCounter = meter->CreateUInt64Counter(
+		"itgmania_mine_events_total",
+		"Mine interactions (hit, avoided).",
+		"count");
+	m_currentSongInfoGauge = meter->CreateInt64Gauge(
+		"itgmania_current_song_info",
+		"Always 1 while a song is selected; labels describe the currently-loaded chart.",
+		"info");
+	m_lastPlayScoreGauge = meter->CreateInt64Gauge(
+		"itgmania_last_play_score",
+		"Final score of the most recent completed play. Query with max_over_time for per-range bests.",
+		"points");
+	m_lastPlayMaxComboGauge = meter->CreateInt64Gauge(
+		"itgmania_last_play_max_combo",
+		"Max combo of the most recent completed play. Query with max_over_time for per-range bests.",
+		"notes");
 
 	if (logs_enabled)
 	{
@@ -412,6 +436,36 @@ opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Histogram<uint6
 opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Histogram<uint64_t>> MetricsProvider::GetSongFinalLifePercentHistogram()
 {
 	return m_songFinalLifePercentHistogram;
+}
+
+opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Histogram<double>> MetricsProvider::GetNoteHitOffsetHistogram()
+{
+	return m_noteHitOffsetHistogram;
+}
+
+opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Counter<uint64_t>> MetricsProvider::GetHoldNoteScoresCounter()
+{
+	return m_holdNoteScoresCounter;
+}
+
+opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Counter<uint64_t>> MetricsProvider::GetMineEventsCounter()
+{
+	return m_mineEventsCounter;
+}
+
+opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Gauge<int64_t>> MetricsProvider::GetCurrentSongInfoGauge()
+{
+	return m_currentSongInfoGauge;
+}
+
+opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Gauge<int64_t>> MetricsProvider::GetLastPlayScoreGauge()
+{
+	return m_lastPlayScoreGauge;
+}
+
+opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::metrics::Gauge<int64_t>> MetricsProvider::GetLastPlayMaxComboGauge()
+{
+	return m_lastPlayMaxComboGauge;
 }
 
 opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::logs::Logger> MetricsProvider::GetLogger()

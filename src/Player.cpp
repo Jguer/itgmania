@@ -29,6 +29,7 @@
 #include "LuaManager.h"
 #include "MessageManager.h"
 #include "MetricsProvider.h"
+#include "OtelLabels.h"
 #include "NoteDataUtil.h"
 #include "NoteDataWithScoring.h"
 #include "NoteField.h"
@@ -293,15 +294,6 @@ ThemeMetric<float> M_MOD_HIGH_CAP("Player", "MModHighCap");
 
 /** @brief Will battle modes have their steps mirrored or kept the same? */
 ThemeMetric<bool> BATTLE_RAVE_MIRROR("Player", "BattleRaveMirror");
-
-static void AddSongStepLabels(
-    std::map<std::string, std::string>& labels, PlayerNumber playerNumber) {
-  Steps* steps = GAMESTATE->m_pCurSteps[playerNumber];
-  if (steps) {
-    labels["difficulty"] = DifficultyToString(steps->GetDifficulty());
-    labels["meter"] = std::to_string(steps->GetMeter());
-  }
-}
 
 float Player::GetWindowSeconds(TimingWindow tw) {
   float fSecs = m_fTimingWindowSeconds[tw];
@@ -1996,8 +1988,8 @@ void Player::ChangeLifeRecord() {
     }
     if (METRICS) {
       if (auto lifeGauge = METRICS->GetGauge("lifeGauge")) {
-        std::map<std::string, std::string> labels = {
-            {"player_number", std::to_string(pn)}};
+        std::map<std::string, std::string> labels;
+        otel_labels::FillGameplay(labels, pn);
         auto labelkv =
             opentelemetry::common::KeyValueIterableView<decltype(labels)>{
                 labels};
@@ -3316,10 +3308,8 @@ void Player::HandleTapRowScore(unsigned row) {
     SetCombo(iCurCombo, iCurMissCombo);
     if (METRICS) {
       if (auto comboGauge = METRICS->GetGauge("comboGauge")) {
-        std::map<std::string, std::string> labels = {
-            {"player_number",
-             std::to_string(m_pPlayerState->m_PlayerNumber)}};
-        AddSongStepLabels(labels, m_pPlayerState->m_PlayerNumber);
+        std::map<std::string, std::string> labels;
+        otel_labels::FillGameplay(labels, m_pPlayerState->m_PlayerNumber);
         auto labelkv =
             opentelemetry::common::KeyValueIterableView<decltype(labels)>{
                 labels};
@@ -3357,13 +3347,14 @@ void Player::HandleTapRowScore(unsigned row) {
 
   // new max combo
   if (m_pPlayerStageStats) {
+    const int iPrevMax = m_pPlayerStageStats->m_iMaxCombo;
     m_pPlayerStageStats->m_iMaxCombo =
         std::max(m_pPlayerStageStats->m_iMaxCombo, iCurCombo);
+    const bool newMax = iCurCombo > iPrevMax;
     if (METRICS) {
       if (auto maxComboGauge = METRICS->GetGauge("maxComboGauge")) {
-        std::map<std::string, std::string> labels = {
-            {"player_number",
-             std::to_string(m_pPlayerState->m_PlayerNumber)}};
+        std::map<std::string, std::string> labels;
+        otel_labels::FillGameplay(labels, m_pPlayerState->m_PlayerNumber);
         auto labelkv =
             opentelemetry::common::KeyValueIterableView<decltype(labels)>{
                 labels};
@@ -3372,6 +3363,14 @@ void Player::HandleTapRowScore(unsigned row) {
             static_cast<int64_t>(m_pPlayerStageStats->m_iMaxCombo), labelkv,
             context);
       }
+    }
+    // Attach a span event every time the max combo advances: these are the
+    // "interesting moments" a commentator can hover over in the trace view.
+    if (newMax && iCurCombo >= 50) {
+      std::map<std::string, std::string> eventAttrs{
+          {"combo", std::to_string(iCurCombo)}};
+      otel_labels::AddCurrentPlayEvent(
+          m_pPlayerState->m_PlayerNumber, "combo.new_max", eventAttrs);
     }
   }
 

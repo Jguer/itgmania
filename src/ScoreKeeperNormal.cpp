@@ -18,6 +18,7 @@
 #include "MessageManager.h"
 #include "MetricsProvider.h"
 #include "NoteData.h"
+#include "OtelLabels.h"
 #include "NoteDataUtil.h"
 #include "NoteDataWithScoring.h"
 #include "NoteTypes.h"
@@ -49,15 +50,6 @@ static ThemeMetric1D<int> g_iPercentScoreWeight(
     "ScoreKeeperNormal", PercentScoreWeightName, NUM_ScoreEvent);
 static ThemeMetric1D<int> g_iGradeWeight(
     "ScoreKeeperNormal", GradeWeightName, NUM_ScoreEvent);
-
-static void AddSongStepLabels(
-    std::map<std::string, std::string>& labels, PlayerNumber playerNumber) {
-  Steps* steps = GAMESTATE->m_pCurSteps[playerNumber];
-  if (steps) {
-    labels["difficulty"] = DifficultyToString(steps->GetDifficulty());
-    labels["meter"] = std::to_string(steps->GetMeter());
-  }
-}
 
 ScoreKeeperNormal::ScoreKeeperNormal(
     PlayerState* pPlayerState, PlayerStageStats* pPlayerStageStats)
@@ -374,10 +366,8 @@ void ScoreKeeperNormal::AddScoreInternal(TapNoteScore score) {
 
     if (METRICS) {
       if (auto scoreGauge = METRICS->GetGauge("scoreGauge")) {
-        std::map<std::string, std::string> labels = {
-            {"player_number",
-             std::to_string(m_pPlayerState->m_PlayerNumber)}};
-        AddSongStepLabels(labels, m_pPlayerState->m_PlayerNumber);
+        std::map<std::string, std::string> labels;
+        otel_labels::FillGameplay(labels, m_pPlayerState->m_PlayerNumber);
         auto labelkv =
             opentelemetry::common::KeyValueIterableView<decltype(labels)>{
                 labels};
@@ -479,10 +469,12 @@ void ScoreKeeperNormal::HandleTapNoteScoreInternal(
     m_pPlayerStageStats->m_iActualDancePoints += TapNoteScoreToDancePoints(tns);
   }
 
-  std::map<std::string, std::string> labels = {
-      {"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)},
-      {"tns", TapNoteScoreToLocalizedString(tns)}};
-  AddSongStepLabels(labels, m_pPlayerState->m_PlayerNumber);
+  // Stable (theme-independent) enum + canonical lowercase judgment name so
+  // Prometheus queries don't break when the theme's localization changes.
+  std::map<std::string, std::string> labels;
+  otel_labels::FillGameplay(labels, m_pPlayerState->m_PlayerNumber);
+  labels["tns"] = TapNoteScoreToString(tns);
+  labels["judgment"] = otel_labels::JudgmentName(tns);
 
   // update judged row totals. Respect Combo segments here.
   TimingData& td =
@@ -508,6 +500,30 @@ void ScoreKeeperNormal::HandleTapNoteScoreInternal(
     if (auto hitCounter = METRICS->GetCounter()) {
       hitCounter->Add(1, labelkv, context);
     }
+    if (tns == TNS_HitMine || tns == TNS_AvoidMine) {
+      if (auto mineCounter = METRICS->GetMineEventsCounter()) {
+        std::map<std::string, std::string> mineLabels;
+        otel_labels::FillGameplay(mineLabels, m_pPlayerState->m_PlayerNumber);
+        mineLabels["result"] =
+            (tns == TNS_HitMine) ? "hit" : "avoided";
+        auto mineLabelkv =
+            opentelemetry::common::KeyValueIterableView<decltype(mineLabels)>{
+                mineLabels};
+        mineCounter->Add(1, mineLabelkv, context);
+      }
+    }
+  }
+
+  // Span events for notable judgments: misses and mine hits both look
+  // like "things the audience will notice" and help narrate the trace.
+  if (tns == TNS_Miss || tns == TNS_HitMine) {
+    std::map<std::string, std::string> eventAttrs{
+        {"judgment", otel_labels::JudgmentName(tns)},
+        {"row", std::to_string(row)}};
+    const char* name =
+        (tns == TNS_HitMine) ? "mine.hit" : "judgment.miss";
+    otel_labels::AddCurrentPlayEvent(
+        m_pPlayerState->m_PlayerNumber, name, eventAttrs);
   }
 
   // increment the current total possible dance score
@@ -515,9 +531,9 @@ void ScoreKeeperNormal::HandleTapNoteScoreInternal(
       TapNoteScoreToDancePoints(maximum);
 
   if (METRICS) {
-    std::map<std::string, std::string> accuracyLabels = {
-        {"player_number", std::to_string(m_pPlayerState->m_PlayerNumber)}};
-    AddSongStepLabels(accuracyLabels, m_pPlayerState->m_PlayerNumber);
+    std::map<std::string, std::string> accuracyLabels;
+    otel_labels::FillGameplay(
+        accuracyLabels, m_pPlayerState->m_PlayerNumber);
     auto labelkv =
         opentelemetry::common::KeyValueIterableView<decltype(accuracyLabels)>{
             accuracyLabels};
@@ -694,17 +710,20 @@ void ScoreKeeperNormal::HandleTapRowScore(const NoteData& nd, int iRow) {
   float offset = NoteDataWithScoring::LastTapNoteWithResult(nd, iRow)
                      .result.fTapNoteOffset;
   if (METRICS) {
+    std::map<std::string, std::string> labels;
+    otel_labels::FillGameplay(labels, pn);
+    labels["judgment"] = otel_labels::JudgmentName(scoreOfLastTap);
+    auto labelkv =
+        opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+    auto context = opentelemetry::context::RuntimeContext::GetCurrent();
+    const double signedOffsetMs = static_cast<double>(offset) * 1000.0;
     if (auto histogram = METRICS->GetHistogram()) {
-      std::map<std::string, std::string> labels = {
-          {"player_number", std::to_string(pn)}};
-      AddSongStepLabels(labels, pn);
-      auto labelkv =
-          opentelemetry::common::KeyValueIterableView<decltype(labels)>{
-              labels};
-      auto context = opentelemetry::context::RuntimeContext::GetCurrent();
-      const uint64_t offsetMs =
-          static_cast<uint64_t>(std::llround(std::abs(offset) * 1000.0f));
+      const uint64_t offsetMs = static_cast<uint64_t>(
+          std::llround(std::abs(signedOffsetMs)));
       histogram->Record(offsetMs, labelkv, context);
+    }
+    if (auto offsetHistogram = METRICS->GetNoteHitOffsetHistogram()) {
+      offsetHistogram->Record(signedOffsetMs, labelkv, context);
     }
   }
   Message msg("ScoreChanged");
@@ -728,6 +747,19 @@ void ScoreKeeperNormal::HandleHoldScore(const TapNote& tn) {
   m_pPlayerStageStats->m_iHoldNoteScores[holdScore]++;
 
   AddHoldScore(holdScore);
+
+  if (METRICS) {
+    if (auto holdCounter = METRICS->GetHoldNoteScoresCounter()) {
+      std::map<std::string, std::string> labels;
+      otel_labels::FillGameplay(labels, m_pPlayerState->m_PlayerNumber);
+      labels["hns"] = HoldNoteScoreToString(holdScore);
+      labels["outcome"] = otel_labels::HnsName(holdScore);
+      auto labelkv =
+          opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
+      auto context = opentelemetry::context::Context{};
+      holdCounter->Add(1, labelkv, context);
+    }
+  }
 
   // TODO: Remove indexing with PlayerNumber
   PlayerNumber pn = m_pPlayerState->m_PlayerNumber;
