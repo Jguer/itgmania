@@ -120,8 +120,8 @@ MetricsProvider::MetricsProvider()
 		auto exporter = otlp_exporter::OtlpGrpcMetricExporterFactory::Create(exporter_options);
 
 		metrics_sdk::PeriodicExportingMetricReaderOptions reader_options;
-		reader_options.export_interval_millis = std::chrono::milliseconds(2000);
-		reader_options.export_timeout_millis = std::chrono::milliseconds(2000);
+		reader_options.export_interval_millis = std::chrono::milliseconds(500);
+		reader_options.export_timeout_millis = std::chrono::milliseconds(400);
 		auto reader =
 			metrics_sdk::PeriodicExportingMetricReaderFactory::Create(std::move(exporter), reader_options);
 
@@ -241,7 +241,9 @@ MetricsProvider::MetricsProvider()
 		"percent");
 	m_noteHitOffsetHistogram = meter->CreateDoubleHistogram(
 		"itgmania_note_hit_offset_ms",
-		"Signed note hit timing offset (negative = early, positive = late).",
+		"Magnitude of note hit timing offset in milliseconds. Use the "
+		"'hit_direction' label (early/late/exact) to distinguish sign; "
+		"OpenTelemetry histograms only accept non-negative values.",
 		"ms");
 	m_holdNoteScoresCounter = meter->CreateUInt64Counter(
 		"itgmania_hold_note_scores_total",

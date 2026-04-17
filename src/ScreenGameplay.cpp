@@ -2872,6 +2872,14 @@ namespace {
 opentelemetry::v2::nostd::shared_ptr<opentelemetry::v2::trace::Span>
     g_songPlaySpans[NUM_PLAYERS];
 
+// Labels of the most recently emitted `itgmania_current_song_info` sample per
+// player. OpenTelemetry has no "remove labelset" API on Gauges, so to prevent
+// stale series from piling up every time a new song is selected we emit a 0
+// for the previous labelset before emitting 1 for the new one. Dashboards
+// select the active song with `itgmania_current_song_info == 1`.
+std::map<std::string, std::string>
+    g_prevCurrentSongInfoLabels[NUM_PLAYERS];
+
 // Identity labels shared by every end-of-song metric/log record.
 static void AddGameplayHistLabels(
     std::map<std::string, std::string>& labels, PlayerNumber pn) {
@@ -2907,10 +2915,21 @@ void EmitCurrentSongInfoGauge() {
     if (Steps* steps = GAMESTATE->m_pCurSteps[pn]) {
       labels["chart_credit"] = steps->GetCredit();
     }
+    auto context = opentelemetry::context::Context{};
+
+    // If the previous labelset differs from the new one, zero it out so the
+    // stale series stops showing up in dashboards that filter on == 1.
+    auto& prev = g_prevCurrentSongInfoLabels[pn];
+    if (!prev.empty() && prev != labels) {
+      auto prevKv = opentelemetry::common::KeyValueIterableView<
+          std::map<std::string, std::string>>{prev};
+      infoGauge->Record(0, prevKv, context);
+    }
+
     auto labelkv =
         opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
-    auto context = opentelemetry::context::Context{};
     infoGauge->Record(1, labelkv, context);
+    prev = labels;
   }
 }
 

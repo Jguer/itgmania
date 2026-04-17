@@ -717,13 +717,29 @@ void ScoreKeeperNormal::HandleTapRowScore(const NoteData& nd, int iRow) {
         opentelemetry::common::KeyValueIterableView<decltype(labels)>{labels};
     auto context = opentelemetry::context::RuntimeContext::GetCurrent();
     const double signedOffsetMs = static_cast<double>(offset) * 1000.0;
+    const double absOffsetMs = std::abs(signedOffsetMs);
     if (auto histogram = METRICS->GetHistogram()) {
-      const uint64_t offsetMs = static_cast<uint64_t>(
-          std::llround(std::abs(signedOffsetMs)));
+      const uint64_t offsetMs =
+          static_cast<uint64_t>(std::llround(absOffsetMs));
       histogram->Record(offsetMs, labelkv, context);
     }
     if (auto offsetHistogram = METRICS->GetNoteHitOffsetHistogram()) {
-      offsetHistogram->Record(signedOffsetMs, labelkv, context);
+      // OpenTelemetry histograms are defined over non-negative values only
+      // (DoubleHistogram::Record drops negatives and logs a warning), so we
+      // record the magnitude and attach the sign as a label so early vs.
+      // late hits can still be separated in queries.
+      std::map<std::string, std::string> offsetLabels = labels;
+      const char* direction = "exact";
+      if (signedOffsetMs < 0.0) {
+        direction = "early";
+      } else if (signedOffsetMs > 0.0) {
+        direction = "late";
+      }
+      offsetLabels["hit_direction"] = direction;
+      auto offsetLabelKv =
+          opentelemetry::common::KeyValueIterableView<decltype(offsetLabels)>{
+              offsetLabels};
+      offsetHistogram->Record(absOffsetMs, offsetLabelKv, context);
     }
   }
   Message msg("ScoreChanged");
