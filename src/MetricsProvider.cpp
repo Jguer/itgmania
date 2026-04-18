@@ -54,6 +54,7 @@
 #include <chrono>
 #include <sstream>
 #include <thread>
+#include <vector>
 
 MetricsProvider* METRICS = nullptr;
 
@@ -84,6 +85,17 @@ double GetTraceSampleRate()
 {
 	auto rate = PREFSMAN ? PREFSMAN->m_fOTelTraceSampleRate.Get() : 1.0f;
 	return std::clamp(static_cast<double>(rate), 0.0, 1.0);
+}
+
+std::vector<double> GetNoteHitOffsetBucketBoundaries()
+{
+	// Keep dense buckets in the timing-window range, but preserve a tail for
+	// obvious outliers so the heatmap can still show "way off beat" hits.
+	return {
+		0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0, 60.0, 75.0, 90.0,
+		100.0, 125.0, 150.0, 175.0, 200.0, 250.0, 333.0, 500.0, 750.0, 1000.0,
+		1500.0, 2000.0, 2500.0, 5000.0, 10000.0,
+	};
 }
 } // namespace
 
@@ -126,6 +138,28 @@ MetricsProvider::MetricsProvider()
 			metrics_sdk::PeriodicExportingMetricReaderFactory::Create(std::move(exporter), reader_options);
 
 		auto views = metrics_sdk::ViewRegistryFactory::Create();
+
+		auto note_hit_offset_instrument_selector = metrics_sdk::InstrumentSelectorFactory::Create(
+			metrics_sdk::InstrumentType::kHistogram, "itgmania_note_hit_offset_ms", "ms");
+		auto note_hit_offset_meter_selector =
+			metrics_sdk::MeterSelectorFactory::Create(name, version, schema);
+		auto note_hit_offset_histogram_config =
+			std::unique_ptr<metrics_sdk::HistogramAggregationConfig>(
+				new metrics_sdk::HistogramAggregationConfig);
+		note_hit_offset_histogram_config->boundaries_ = GetNoteHitOffsetBucketBoundaries();
+		std::shared_ptr<metrics_sdk::AggregationConfig> note_hit_offset_aggregation_config(
+			std::move(note_hit_offset_histogram_config));
+		auto note_hit_offset_view = metrics_sdk::ViewFactory::Create(
+			"itgmania_note_hit_offset_ms",
+			"Absolute note hit timing offset in milliseconds with explicit buckets for gameplay analysis.",
+			"ms",
+			metrics_sdk::AggregationType::kHistogram,
+			note_hit_offset_aggregation_config);
+		views->AddView(
+			std::move(note_hit_offset_instrument_selector),
+			std::move(note_hit_offset_meter_selector),
+			std::move(note_hit_offset_view));
+
 		auto context = metrics_sdk::MeterContextFactory::Create(std::move(views), resource);
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
 		context->SetExemplarFilter(metrics_sdk::ExemplarFilterType::kTraceBased);
